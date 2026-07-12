@@ -4,6 +4,10 @@
 
 Issues live as GitHub issues in Alexin12/AI-Recall-Map, managed via the `gh` CLI. See `docs/agents/issue-tracker.md`.
 
+### Git / PR workflow
+
+Dual-mode: Serial (default, plain branch) and Parallel (one worktree per task). One step = one branch = one PR, always cut from an up-to-date main; a human merges from GitHub, no auto-merge. See `docs/agents/git-workflow.md`.
+
 ### Triage labels
 
 Default label vocabulary (needs-triage, needs-info, ready-for-agent, ready-for-human, wontfix). See `docs/agents/triage-labels.md`.
@@ -11,3 +15,27 @@ Default label vocabulary (needs-triage, needs-info, ready-for-agent, ready-for-h
 ### Domain docs
 
 Multi-context layout — `CONTEXT-MAP.md` at root points to `frontend/CONTEXT.md` and `backend/CONTEXT.md`. See `docs/agents/domain.md`.
+
+### Unattended / autonomous runs
+
+When explicitly authorized to run unattended for a long stretch, the following stay hard limits
+regardless of autonomy level:
+
+- **Never push or merge directly to `master`/`main`.** Merging a PR is always a human action on
+  GitHub.
+- **Never force-push.** `git push --force`/`--force-with-lease` is forbidden by policy regardless
+  of autonomy level.
+- **Never commit `.env`, credentials, API keys, or other secret files.** Check `git status`/`git
+  diff` for anything that looks like a secret before every autonomous commit; when in doubt, leave
+  it uncommitted and flag it in the summary instead of committing.
+- **`rm -rf` is confined to `.claude/worktrees/**`** — enforced by the guard-bash hook
+  (`scripts/claude-hooks/guard-bash.sh`). Cleanup or resets elsewhere must not use `rm -rf`.
+- **Stop after 3 consecutive failures on the same step** (e.g. a test that won't pass, a command
+  that won't succeed) instead of retrying indefinitely — write a short summary of what was tried
+  and why it's stuck, then end the turn rather than burning the run on a loop.
+
+### Lab notebook — mistakes not to repeat
+
+A running log of concrete mistakes made on this project, so a future Claude instance does not
+retry them. See `lab-notebook.md` at the repo root; append new entries there, newest at the
+bottom.
