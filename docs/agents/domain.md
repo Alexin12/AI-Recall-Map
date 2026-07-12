@@ -7,7 +7,7 @@ How the engineering skills should consume this repo's domain documentation when 
 - **`CONTEXT-MAP.md`** at the repo root — points at one `CONTEXT.md` per context (frontend, backend). Read each one relevant to the topic.
 - **`docs/adr/`** — system-wide decisions. Also check `frontend/docs/adr/` and `backend/docs/adr/` for context-scoped decisions.
 
-None of `CONTEXT-MAP.md`, `CONTEXT.md`, or `docs/adr/` exist yet — this repo is pre-code. Until they're generated, treat [Plan_v1.md](../../Plan_v1.md) and [Grill_Questions_v1.md](../../Grill_Questions_v1.md) as the working domain reference: Plan_v1.md holds the canonical glossary and resolved architecture decisions, Grill_Questions_v1.md holds the reasoning behind each decision. `CONTEXT.md`/ADRs get created lazily by `/grill-with-docs` once code exists to attach them to — don't flag their absence, don't suggest creating them upfront.
+`CONTEXT-MAP.md`, `backend/CONTEXT.md`, `frontend/CONTEXT.md`, and an initial set of ADRs (`docs/adr/`, `backend/docs/adr/`) were seeded from Plan_v1.md and Grill_Questions_v1.md on 2026-07-12, before any application code exists — treat them as authoritative over Plan_v1.md/Grill_Questions_v1.md going forward, since those two are the historical planning record, not the maintained reference. Keep extending `CONTEXT.md`/ADRs inline as new terms and decisions arise (per `/grill-with-docs`); no more bulk seeding.
 
 ## File structure (multi-context: Next.js frontend + FastAPI backend)
 
