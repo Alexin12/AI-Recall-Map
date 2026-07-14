@@ -13,3 +13,10 @@ export type Goal = {
   created_at: string;
   updated_at: string;
 };
+
+// Hand-synced with the backend Pydantic model app/topics.py -> Topic.
+export type Topic = {
+  id: string;
+  name: string;
+  created_at: string;
+};
