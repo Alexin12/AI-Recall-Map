@@ -20,3 +20,11 @@ export type Topic = {
   name: string;
   created_at: string;
 };
+
+// Hand-synced with the backend Pydantic model app/materials.py -> Material.
+export type Material = {
+  id: string;
+  topic_id: string;
+  content: string;
+  created_at: string;
+};
