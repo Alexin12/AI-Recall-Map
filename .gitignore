@@ -20,3 +20,6 @@ venv/
 
 # Claude Code local settings (user-specific permissions)
 .claude/settings.local.json
+
+# Supabase Studio scratch snippets (auto-generated, not project code)
+supabase/snippets/

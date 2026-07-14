@@ -34,6 +34,10 @@ regardless of autonomy level:
   that won't succeed) instead of retrying indefinitely — write a short summary of what was tried
   and why it's stuck, then end the turn rather than burning the run on a loop.
 
+### Explain jargon before asking the user to act
+
+The user is a beginner (no prior coding/deployment background) learning this stack as they go. Before asking them to run a command or change a config themselves, explain any non-obvious term in it (tool names like `jq`, `Docker`, config keys like `allowLocalBinding`, `sandbox.network`) in plain language first — what it is and why this step needs it — rather than just handing over the command. Prefer making the change directly when possible over asking the user to run it.
+
 ### Lab notebook — mistakes not to repeat
 
 A running log of concrete mistakes made on this project, so a future Claude instance does not
