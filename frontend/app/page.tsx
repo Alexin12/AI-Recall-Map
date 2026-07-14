@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 
 import { supabase } from "@/lib/supabaseClient";
 // Created a supabase client, and it include anno key 
@@ -49,6 +50,9 @@ export default function Home() {
         Run tracer bullet
       </button>
       <p>{status}</p>
+      <p>
+        <Link href="/topics">Go to topics</Link>
+      </p>
       <ul>
         {pings.map((p) => (
           <li key={p.id}>

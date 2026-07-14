@@ -5,3 +5,10 @@ export type Ping = {
   message: string;
   created_at: string;
 };
+
+// Hand-synced with the backend Pydantic model app/topics.py -> Topic.
+export type Topic = {
+  id: string;
+  name: string;
+  created_at: string;
+};
