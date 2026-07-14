@@ -5,3 +5,11 @@ export type Ping = {
   message: string;
   created_at: string;
 };
+
+// Hand-synced with the backend Pydantic model app/goals.py -> Goal.
+export type Goal = {
+  id: string;
+  content: string;
+  created_at: string;
+  updated_at: string;
+};
