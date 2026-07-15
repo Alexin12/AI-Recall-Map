@@ -59,6 +59,8 @@ export type Review = {
   question_id: string;
   answer: string;
   verdict: "fail" | "partial" | "pass" | "strong";
+  ai_verdict: "fail" | "partial" | "pass" | "strong";
+  verdict_overridden: boolean;
   feedback: Feedback;
   next_due_at: string;
   created_at: string;

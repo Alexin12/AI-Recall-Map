@@ -138,6 +138,25 @@ async def test_grading_uses_only_explanation_snippet_and_answer(client, make_use
     ]
 
 
+async def test_written_question_is_graded_the_same_way(client, make_user, monkeypatch):
+    stub_grading(monkeypatch)
+    _, auth = await make_user()
+    topic_id, concept = await confirmed_scheduled_concept(client, auth, monkeypatch)
+    [written] = [q for q in concept["questions"] if q["kind"] == "written"]
+
+    answered = await client.post(
+        f"/questions/{written['id']}/answer",
+        json={"answer": "In my own words: ser expresses essence."},
+        headers=auth,
+    )
+    assert answered.status_code == 200
+    body = answered.json()
+    assert body["verdict"] == "pass"
+    assert body["feedback"]["correct_points"] == ["Named ser for essence"]
+    # The written attempt persists and reschedules like a flashcard one.
+    assert (await client.get(f"/topics/{topic_id}/due", headers=auth)).json() == []
+
+
 async def test_rls_blocks_answering_and_reading_other_users_reviews(
     client, make_user, monkeypatch
 ):
