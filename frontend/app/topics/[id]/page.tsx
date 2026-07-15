@@ -48,6 +48,37 @@ export default function TopicPage({ params }: { params: Promise<{ id: string }> 
     loadMaterials().catch((e) => setStatus(String(e)));
   }, []);
 
+  /** Call the extraction endpoint and render each streamed NDJSON progress event. */
+  async function extractMaterial(materialId: string, token: string) {
+    const res = await fetch(`${API_URL}/materials/${materialId}/extract`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok || !res.body) {
+      setStatus(`Extraction failed (${res.status})`);
+      return;
+    }
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() ?? "";
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        const event = JSON.parse(line);
+        if (event.type === "progress") {
+          setStatus(`Extracting… (${event.stage})`);
+        } else if (event.type === "result") {
+          setStatus(`Extracted ${event.concepts.length} concept(s)`);
+        }
+      }
+    }
+  }
+
   async function pasteMaterial(e: React.FormEvent) {
     e.preventDefault();
     if (!content.trim()) return;
@@ -67,6 +98,8 @@ export default function TopicPage({ params }: { params: Promise<{ id: string }> 
       return;
     }
     setContent("");
+    const material = await res.json();
+    await extractMaterial(material.id, token);
     await loadMaterials();
   }
 
