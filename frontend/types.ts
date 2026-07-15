@@ -74,6 +74,27 @@ export type ConceptDetail = Concept & {
   reviews: Review[];
 };
 
+// Hand-synced with the backend Pydantic models app/concept_map.py.
+export type MapNode = {
+  id: string;
+  name: string;
+  goal_relevance: "irrelevant" | "supporting" | "core";
+  scheduled: boolean;
+  confirmed: boolean;
+};
+
+export type Relationship = {
+  id: string;
+  from_concept_id: string;
+  to_concept_id: string;
+  kind: string;
+};
+
+export type ConceptMap = {
+  nodes: MapNode[];
+  relationships: Relationship[];
+};
+
 // Hand-synced with the backend Pydantic model app/materials.py -> Material.
 export type Material = {
   id: string;

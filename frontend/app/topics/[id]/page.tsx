@@ -4,7 +4,8 @@ import { use, useEffect, useState } from "react";
 import Link from "next/link";
 
 import { supabase } from "@/lib/supabaseClient";
-import type { Concept, Material } from "@/types";
+import type { Concept, ConceptMap as ConceptMapData, Material } from "@/types";
+import ConceptMap from "./ConceptMap";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL!;
 
@@ -32,6 +33,7 @@ export default function TopicPage({ params }: { params: Promise<{ id: string }> 
   const [pending, setPending] = useState<Concept[]>([]);
   const [pendingMaterialId, setPendingMaterialId] = useState<string | null>(null);
   const [concepts, setConcepts] = useState<Concept[]>([]);
+  const [map, setMap] = useState<ConceptMapData | null>(null);
 
   async function loadConcepts() {
     const token = await getToken();
@@ -39,6 +41,10 @@ export default function TopicPage({ params }: { params: Promise<{ id: string }> 
       headers: { Authorization: `Bearer ${token}` },
     });
     if (res.ok) setConcepts(await res.json());
+    const mapRes = await fetch(`${API_URL}/topics/${id}/map`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (mapRes.ok) setMap(await mapRes.json());
   }
 
   async function loadMaterials() {
@@ -240,6 +246,12 @@ export default function TopicPage({ params }: { params: Promise<{ id: string }> 
           </li>
         ))}
       </ul>
+      {map && map.nodes.length > 0 && (
+        <>
+          <h2>Concept Map</h2>
+          <ConceptMap map={map} />
+        </>
+      )}
       {concepts.length > 0 && (
         <>
           <h2>Concepts</h2>
