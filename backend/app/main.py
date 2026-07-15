@@ -12,6 +12,7 @@ from app.deps import UserConn
 from app.extraction import router as extraction_router
 from app.goals import router as goals_router
 from app.materials import router as materials_router
+from app.reviews import router as reviews_router
 from app.topics import router as topics_router
 
 app = FastAPI(title="AI Recall Map API")
@@ -19,6 +20,7 @@ app.include_router(confirmation_router)
 app.include_router(extraction_router)
 app.include_router(goals_router)
 app.include_router(materials_router)
+app.include_router(reviews_router)
 app.include_router(topics_router)
 
 # Allow the local Next.js dev server to call the API from the browser.

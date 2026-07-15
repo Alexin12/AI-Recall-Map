@@ -45,6 +45,25 @@ export type Concept = {
   questions: Question[];
 };
 
+// Hand-synced with the backend Pydantic model app/reviews.py -> Feedback.
+export type Feedback = {
+  correct_points: string[];
+  missing_points: string[];
+  misconceptions: string[];
+};
+
+// Hand-synced with the backend Pydantic model app/reviews.py -> Review.
+export type Review = {
+  id: string;
+  concept_id: string;
+  question_id: string;
+  answer: string;
+  verdict: "fail" | "partial" | "pass" | "strong";
+  feedback: Feedback;
+  next_due_at: string;
+  created_at: string;
+};
+
 // Hand-synced with the backend Pydantic model app/materials.py -> Material.
 export type Material = {
   id: string;
