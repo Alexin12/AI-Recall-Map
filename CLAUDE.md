@@ -68,3 +68,11 @@ Whenever the user asks how to test a PR before merging, inspect the actual PR ch
    - Provide simple, numbered steps to test the normal flow and important failure cases before merging.
 
 Base the answer on the actual code and PR diff. Do not guess. Keep the explanation concise and beginner-friendly. The user should understand the feature's behavior without needing to understand every line of code.
+
+### gh failures with `x509: OSStatus -26276`: stop retrying, hand the command to the user
+
+The sandbox denies reading `~/Library`, where macOS keeps the Keychain (gh's token) and the
+certificate trust store, so `gh` calls fail intermittently with `tls: failed to verify
+certificate: x509: OSStatus -26276`. REST vs GraphQL, retry loops, and `curl` + `gh auth token`
+all dead-end (see `lab-notebook.md`, 2026-07-15). After ~2 failures with this error, do not keep
+trying — print a paste-ready command for the user to run in their own terminal instead.
