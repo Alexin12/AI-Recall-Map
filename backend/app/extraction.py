@@ -6,6 +6,7 @@ owns the route, persistence, and response shape.
 """
 
 import json
+import logging
 from datetime import datetime
 
 from fastapi import APIRouter, HTTPException, status
@@ -17,6 +18,7 @@ from app.deps import UserConn
 from app.llm import extract_concepts as llm_extract_concepts
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 class Question(BaseModel):
@@ -133,13 +135,23 @@ async def extract_material(material_id: str, conn: UserConn) -> StreamingRespons
         def event(payload: dict) -> str:
             return json.dumps(payload) + "\n"
 
+        # HTTP 200 is already sent once streaming starts, so failures must be
+        # reported as an in-stream event — an unhandled exception would just
+        # close the stream and leave the client waiting (issue #30).
         yield event({"type": "progress", "stage": "extracting"})
-        extracted = await llm_extract_concepts(material.content, goal)
-        yield event({"type": "progress", "stage": "saving", "count": len(extracted)})
-        concepts = [await insert_concept(conn, material, e) for e in extracted]
-        yield event(
-            {"type": "result", "concepts": [c.model_dump(mode="json") for c in concepts]}
-        )
+        try:
+            extracted = await llm_extract_concepts(material.content, goal)
+            yield event({"type": "progress", "stage": "saving", "count": len(extracted)})
+            concepts = [await insert_concept(conn, material, e) for e in extracted]
+            yield event(
+                {"type": "result", "concepts": [c.model_dump(mode="json") for c in concepts]}
+            )
+        except Exception as exc:
+            logger.exception("Extraction failed for material %s", material_id)
+            # Catching the error keeps the request "successful", so roll back
+            # explicitly or a partial batch of inserts would be committed.
+            await conn.rollback()
+            yield event({"type": "error", "message": str(exc)})
 
     return StreamingResponse(stream(), media_type="application/x-ndjson")
 
