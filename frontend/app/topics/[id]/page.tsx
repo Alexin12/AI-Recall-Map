@@ -31,6 +31,15 @@ export default function TopicPage({ params }: { params: Promise<{ id: string }> 
   const [status, setStatus] = useState("Loading…");
   const [pending, setPending] = useState<Concept[]>([]);
   const [pendingMaterialId, setPendingMaterialId] = useState<string | null>(null);
+  const [concepts, setConcepts] = useState<Concept[]>([]);
+
+  async function loadConcepts() {
+    const token = await getToken();
+    const res = await fetch(`${API_URL}/topics/${id}/concepts`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (res.ok) setConcepts(await res.json());
+  }
 
   async function loadMaterials() {
     const token = await getToken();
@@ -48,6 +57,7 @@ export default function TopicPage({ params }: { params: Promise<{ id: string }> 
 
   useEffect(() => {
     loadMaterials().catch((e) => setStatus(String(e)));
+    loadConcepts().catch(() => {});
   }, []);
 
   /** Call the extraction endpoint and render each streamed NDJSON progress event. */
@@ -130,6 +140,7 @@ export default function TopicPage({ params }: { params: Promise<{ id: string }> 
     setPending([]);
     setPendingMaterialId(null);
     setStatus(`Confirmed ${confirmed.length} concept(s)`);
+    await loadConcepts();
   }
 
   async function pasteMaterial(e: React.FormEvent) {
@@ -229,6 +240,19 @@ export default function TopicPage({ params }: { params: Promise<{ id: string }> 
           </li>
         ))}
       </ul>
+      {concepts.length > 0 && (
+        <>
+          <h2>Concepts</h2>
+          <ul>
+            {concepts.map((c) => (
+              <li key={c.id}>
+                <Link href={`/concepts/${c.id}`}>{c.name}</Link> — {c.goal_relevance}
+                {c.confirmed ? "" : " (unconfirmed)"}
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
       <p>
         <Link href={`/topics/${id}/review`}>Start review</Link>
       </p>

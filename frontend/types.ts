@@ -66,6 +66,14 @@ export type Review = {
   created_at: string;
 };
 
+// Hand-synced with the backend Pydantic model app/concepts.py -> ConceptDetail.
+export type ConceptDetail = Concept & {
+  mastery: "weak" | "learning" | "strong";
+  due: boolean;
+  next_due_at: string;
+  reviews: Review[];
+};
+
 // Hand-synced with the backend Pydantic model app/materials.py -> Material.
 export type Material = {
   id: string;
