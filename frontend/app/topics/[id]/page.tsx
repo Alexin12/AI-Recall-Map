@@ -79,24 +79,36 @@ export default function TopicPage({ params }: { params: Promise<{ id: string }> 
     const reader = res.body.getReader();
     const decoder = new TextDecoder();
     let buffer = "";
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split("\n");
-      buffer = lines.pop() ?? "";
-      for (const line of lines) {
-        if (!line.trim()) continue;
-        const event = JSON.parse(line);
-        if (event.type === "progress") {
-          setStatus(`Extracting… (${event.stage})`);
-        } else if (event.type === "result") {
-          setStatus(`Extracted ${event.concepts.length} concept(s) — review them below`);
-          setPending(event.concepts);
-          setPendingMaterialId(materialId);
+    let gotResult = false;
+    try {
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() ?? "";
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          const event = JSON.parse(line);
+          if (event.type === "progress") {
+            setStatus(`Extracting… (${event.stage})`);
+          } else if (event.type === "error") {
+            setStatus(`Extraction failed: ${event.message} — try pasting again`);
+            return;
+          } else if (event.type === "result") {
+            gotResult = true;
+            setStatus(`Extracted ${event.concepts.length} concept(s) — review them below`);
+            setPending(event.concepts);
+            setPendingMaterialId(materialId);
+          }
         }
       }
+    } catch {
+      setStatus("Extraction failed: connection lost — try pasting again");
+      return;
     }
+    // A stream that closes without a result event is a failure too (issue #30).
+    if (!gotResult) setStatus("Extraction failed — try pasting again");
   }
 
   /** PATCH one field of a pending Concept and mirror the server's row locally. */
@@ -169,8 +181,12 @@ export default function TopicPage({ params }: { params: Promise<{ id: string }> 
     }
     setContent("");
     const material = await res.json();
-    await extractMaterial(material.id, token);
+    // Refresh the material list first: extractMaterial owns the status line
+    // from here on, so its success/failure message must not be overwritten.
     await loadMaterials();
+    await extractMaterial(material.id, token);
+    // Show whatever extraction persisted even if the result event was missed.
+    await loadConcepts();
   }
 
   return (

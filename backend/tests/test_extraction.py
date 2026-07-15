@@ -103,6 +103,54 @@ async def test_extraction_streams_progress_before_result(client, make_user, monk
     assert events[-1]["type"] == "result"
 
 
+async def test_llm_failure_streams_an_error_event(client, make_user, monkeypatch):
+    async def failing_extract(material_content, goal):
+        raise RuntimeError("LLM call failed")
+
+    monkeypatch.setattr("app.extraction.llm_extract_concepts", failing_extract)
+    _, auth = await make_user()
+    topic_id = await make_topic(client, auth)
+    material_id = await make_material(client, auth, topic_id)
+
+    resp = await client.post(f"/materials/{material_id}/extract", headers=auth)
+
+    assert resp.status_code == 200
+    events = events_of(resp.text)
+    assert events[-1]["type"] == "error"
+    assert "LLM call failed" in events[-1]["message"]
+    # Nothing was persisted for the failed extraction.
+    assert (await client.get(f"/topics/{topic_id}/concepts", headers=auth)).json() == []
+
+
+async def test_failed_save_rolls_back_partial_inserts(client, make_user, monkeypatch):
+    two_concepts = STUB_CONCEPTS + [
+        STUB_CONCEPTS[0].model_copy(update={"name": "Estar for states"})
+    ]
+    stub_llm(monkeypatch, concepts=two_concepts)
+
+    from app import extraction
+
+    real_insert = extraction.insert_concept
+    calls = {"n": 0}
+
+    async def insert_then_fail(conn, material, extracted):
+        calls["n"] += 1
+        if calls["n"] == 2:
+            raise RuntimeError("insert failed")
+        return await real_insert(conn, material, extracted)
+
+    monkeypatch.setattr("app.extraction.insert_concept", insert_then_fail)
+    _, auth = await make_user()
+    topic_id = await make_topic(client, auth)
+    material_id = await make_material(client, auth, topic_id)
+
+    resp = await client.post(f"/materials/{material_id}/extract", headers=auth)
+
+    assert events_of(resp.text)[-1]["type"] == "error"
+    # The first concept's insert was rolled back, not committed.
+    assert (await client.get(f"/topics/{topic_id}/concepts", headers=auth)).json() == []
+
+
 async def test_goal_is_passed_to_the_llm(client, make_user, monkeypatch):
     calls = stub_llm(monkeypatch)
     _, auth = await make_user()
