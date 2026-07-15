@@ -181,8 +181,12 @@ export default function TopicPage({ params }: { params: Promise<{ id: string }> 
     }
     setContent("");
     const material = await res.json();
-    await extractMaterial(material.id, token);
+    // Refresh the material list first: extractMaterial owns the status line
+    // from here on, so its success/failure message must not be overwritten.
     await loadMaterials();
+    await extractMaterial(material.id, token);
+    // Show whatever extraction persisted even if the result event was missed.
+    await loadConcepts();
   }
 
   return (
