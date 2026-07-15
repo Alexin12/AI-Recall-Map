@@ -229,6 +229,9 @@ export default function TopicPage({ params }: { params: Promise<{ id: string }> 
           </li>
         ))}
       </ul>
+      <p>
+        <Link href={`/topics/${id}/review`}>Start review</Link>
+      </p>
       <Link href="/topics">Back to topics</Link>
     </main>
   );
