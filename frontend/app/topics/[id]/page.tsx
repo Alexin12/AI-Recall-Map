@@ -4,7 +4,7 @@ import { use, useEffect, useState } from "react";
 import Link from "next/link";
 
 import { supabase } from "@/lib/supabaseClient";
-import type { Material } from "@/types";
+import type { Concept, Material } from "@/types";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL!;
 
@@ -29,6 +29,8 @@ export default function TopicPage({ params }: { params: Promise<{ id: string }> 
   const [materials, setMaterials] = useState<Material[]>([]);
   const [content, setContent] = useState("");
   const [status, setStatus] = useState("Loading…");
+  const [pending, setPending] = useState<Concept[]>([]);
+  const [pendingMaterialId, setPendingMaterialId] = useState<string | null>(null);
 
   async function loadMaterials() {
     const token = await getToken();
@@ -73,10 +75,61 @@ export default function TopicPage({ params }: { params: Promise<{ id: string }> 
         if (event.type === "progress") {
           setStatus(`Extracting… (${event.stage})`);
         } else if (event.type === "result") {
-          setStatus(`Extracted ${event.concepts.length} concept(s)`);
+          setStatus(`Extracted ${event.concepts.length} concept(s) — review them below`);
+          setPending(event.concepts);
+          setPendingMaterialId(materialId);
         }
       }
     }
+  }
+
+  /** PATCH one field of a pending Concept and mirror the server's row locally. */
+  async function editConcept(conceptId: string, patch: Partial<Concept>) {
+    const token = await getToken();
+    const res = await fetch(`${API_URL}/concepts/${conceptId}`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(patch),
+    });
+    if (!res.ok) {
+      setStatus(`Edit failed (${res.status})`);
+      return;
+    }
+    const updated: Concept = await res.json();
+    setPending((prev) => prev.map((c) => (c.id === updated.id ? { ...c, ...updated } : c)));
+  }
+
+  async function deleteConcept(conceptId: string) {
+    const token = await getToken();
+    const res = await fetch(`${API_URL}/concepts/${conceptId}`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) {
+      setStatus(`Delete failed (${res.status})`);
+      return;
+    }
+    setPending((prev) => prev.filter((c) => c.id !== conceptId));
+  }
+
+  async function confirmConcepts() {
+    if (!pendingMaterialId) return;
+    const token = await getToken();
+    const res = await fetch(`${API_URL}/materials/${pendingMaterialId}/confirm`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) {
+      setStatus(`Confirm failed (${res.status})`);
+      return;
+    }
+    const confirmed: Concept[] = await res.json();
+    setPending([]);
+    setPendingMaterialId(null);
+    setStatus(`Confirmed ${confirmed.length} concept(s)`);
   }
 
   async function pasteMaterial(e: React.FormEvent) {
@@ -120,6 +173,53 @@ export default function TopicPage({ params }: { params: Promise<{ id: string }> 
         </button>
       </form>
       <p>{status}</p>
+      {pending.length > 0 && (
+        <section style={{ border: "1px solid #ccc", padding: 12, marginBottom: 16 }}>
+          <h2>Confirm extracted concepts</h2>
+          <ul style={{ listStyle: "none", padding: 0 }}>
+            {pending.map((c) => (
+              <li key={c.id} style={{ borderBottom: "1px solid #eee", padding: "8px 0" }}>
+                <input
+                  defaultValue={c.name}
+                  onBlur={(e) => {
+                    if (e.target.value !== c.name) editConcept(c.id, { name: e.target.value });
+                  }}
+                  style={{ fontWeight: "bold", width: "100%", marginBottom: 4 }}
+                />
+                <textarea
+                  defaultValue={c.explanation}
+                  rows={2}
+                  onBlur={(e) => {
+                    if (e.target.value !== c.explanation)
+                      editConcept(c.id, { explanation: e.target.value });
+                  }}
+                  style={{ width: "100%", marginBottom: 4 }}
+                />
+                <small>
+                  “{c.source_snippet}” — {c.goal_relevance}, confidence{" "}
+                  {Math.round(c.confidence * 100)}%
+                </small>
+                <div>
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={c.scheduled}
+                      onChange={(e) => editConcept(c.id, { scheduled: e.target.checked })}
+                    />{" "}
+                    Schedule for review
+                  </label>{" "}
+                  <button type="button" onClick={() => deleteConcept(c.id)}>
+                    Delete
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+          <button type="button" onClick={confirmConcepts} style={{ padding: "8px 16px" }}>
+            Confirm concepts
+          </button>
+        </section>
+      )}
       <ul>
         {materials.map((m) => (
           <li key={m.id}>
