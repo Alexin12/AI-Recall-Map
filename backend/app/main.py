@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from sqlalchemy import text
 
+from app.concepts import router as concepts_router
 from app.confirmation import router as confirmation_router
 from app.deps import UserConn
 from app.extraction import router as extraction_router
@@ -16,6 +17,7 @@ from app.reviews import router as reviews_router
 from app.topics import router as topics_router
 
 app = FastAPI(title="AI Recall Map API")
+app.include_router(concepts_router)
 app.include_router(confirmation_router)
 app.include_router(extraction_router)
 app.include_router(goals_router)
