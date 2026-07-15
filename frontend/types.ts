@@ -21,6 +21,30 @@ export type Topic = {
   created_at: string;
 };
 
+// Hand-synced with the backend Pydantic model app/extraction.py -> Question.
+export type Question = {
+  id: string;
+  concept_id: string;
+  kind: "flashcard" | "written";
+  prompt: string;
+};
+
+// Hand-synced with the backend Pydantic model app/extraction.py -> Concept.
+export type Concept = {
+  id: string;
+  topic_id: string;
+  material_id: string;
+  name: string;
+  explanation: string;
+  source_snippet: string;
+  goal_relevance: "irrelevant" | "supporting" | "core";
+  confidence: number;
+  scheduled: boolean;
+  confirmed: boolean;
+  created_at: string;
+  questions: Question[];
+};
+
 // Hand-synced with the backend Pydantic model app/materials.py -> Material.
 export type Material = {
   id: string;

@@ -39,6 +39,8 @@ class Concept(BaseModel):
     source_snippet: str
     goal_relevance: str
     confidence: float
+    scheduled: bool
+    confirmed: bool
     created_at: datetime
     questions: list[Question] = []
 
@@ -68,11 +70,11 @@ async def insert_concept(conn, material, extracted) -> Concept:
         await conn.execute(
             text(
                 "INSERT INTO concepts (topic_id, material_id, name, explanation, "
-                "source_snippet, goal_relevance, confidence) "
+                "source_snippet, goal_relevance, confidence, scheduled) "
                 "VALUES (:topic_id, :material_id, :name, :explanation, "
-                ":source_snippet, :goal_relevance, :confidence) "
+                ":source_snippet, :goal_relevance, :confidence, :scheduled) "
                 "RETURNING id, topic_id, material_id, name, explanation, "
-                "source_snippet, goal_relevance, confidence, created_at"
+                "source_snippet, goal_relevance, confidence, scheduled, confirmed, created_at"
             ),
             {
                 "topic_id": str(material.topic_id),
@@ -82,6 +84,8 @@ async def insert_concept(conn, material, extracted) -> Concept:
                 "source_snippet": extracted.source_snippet,
                 "goal_relevance": extracted.goal_relevance,
                 "confidence": extracted.confidence,
+                # Scheduling default: core Concepts enter review, others stay browsable.
+                "scheduled": extracted.goal_relevance == "core",
             },
         )
     ).one()
@@ -112,6 +116,8 @@ async def insert_concept(conn, material, extracted) -> Concept:
         source_snippet=row.source_snippet,
         goal_relevance=row.goal_relevance,
         confidence=row.confidence,
+        scheduled=row.scheduled,
+        confirmed=row.confirmed,
         created_at=row.created_at,
         questions=questions,
     )
@@ -149,7 +155,7 @@ async def list_concepts(topic_id: str, conn: UserConn) -> list[Concept]:
     rows = await conn.execute(
         text(
             "SELECT id, topic_id, material_id, name, explanation, source_snippet, "
-            "goal_relevance, confidence, created_at FROM concepts "
+            "goal_relevance, confidence, scheduled, confirmed, created_at FROM concepts "
             "WHERE topic_id = :topic_id ORDER BY created_at"
         ),
         {"topic_id": topic_id},
@@ -164,6 +170,8 @@ async def list_concepts(topic_id: str, conn: UserConn) -> list[Concept]:
             source_snippet=r.source_snippet,
             goal_relevance=r.goal_relevance,
             confidence=r.confidence,
+            scheduled=r.scheduled,
+            confirmed=r.confirmed,
             created_at=r.created_at,
         )
         for r in rows
