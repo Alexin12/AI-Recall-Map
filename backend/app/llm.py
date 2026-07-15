@@ -45,7 +45,7 @@ async def grade_answer(
     """Grade one answer from the Concept's explanation + snippet only (ADR-0001)."""
     client = AsyncAnthropic()
     response = await client.messages.parse(
-        model="claude-opus-4-8",
+        model="claude-sonnet-5",
         max_tokens=16000,
         system=GRADING_SYSTEM_PROMPT_V1,
         messages=[
@@ -69,7 +69,7 @@ async def extract_concepts(material_content: str, goal: str | None) -> list[Extr
     client = AsyncAnthropic()
     goal_line = f"The user's learning Goal: {goal}" if goal else "The user has not set a Goal."
     response = await client.messages.parse(
-        model="claude-opus-4-8",
+        model="claude-sonnet-5",
         max_tokens=16000,
         system=EXTRACTION_SYSTEM_PROMPT_V1,
         messages=[
