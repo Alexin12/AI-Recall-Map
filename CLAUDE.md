@@ -43,3 +43,28 @@ The user is a beginner (no prior coding/deployment background) learning this sta
 A running log of concrete mistakes made on this project, so a future Claude instance does not
 retry them. See `lab-notebook.md` at the repo root; append new entries there, newest at the
 bottom.
+
+
+### PR Testing Guidance
+
+Whenever the user asks how to test a PR before merging, inspect the actual PR changes first and explain the testing plan using this exact structure:
+
+1. **What the user does**
+   - Describe the user action that starts the flow.
+
+2. **Entry endpoint or component**
+   - Identify the backend endpoint, frontend component, or other entry point involved.
+
+3. **Key data flow**
+   - Explain the important steps the data passes through, including relevant services, database operations, and external APIs.
+
+4. **Expected successful result**
+   - Describe the visible result and any expected data changes.
+
+5. **Possible failure points**
+   - List realistic places where the flow could fail and what the user would observe.
+
+6. **Manual testing steps**
+   - Provide simple, numbered steps to test the normal flow and important failure cases before merging.
+
+Base the answer on the actual code and PR diff. Do not guess. Keep the explanation concise and beginner-friendly. The user should understand the feature's behavior without needing to understand every line of code.
