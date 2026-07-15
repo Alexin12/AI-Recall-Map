@@ -30,6 +30,7 @@ export default function ReviewPage({ params }: { params: Promise<{ id: string }>
   const [answer, setAnswer] = useState("");
   const [result, setResult] = useState<Review | null>(null);
   const [status, setStatus] = useState("Loading…");
+  const [mode, setMode] = useState<"flashcard" | "written">("flashcard");
 
   async function loadDue() {
     const token = await getToken();
@@ -50,14 +51,14 @@ export default function ReviewPage({ params }: { params: Promise<{ id: string }>
   }, []);
 
   const current = due[0];
-  const flashcard = current?.questions.find((q) => q.kind === "flashcard");
+  const question = current?.questions.find((q) => q.kind === mode);
 
   async function submitAnswer(e: React.FormEvent) {
     e.preventDefault();
-    if (!flashcard || !answer.trim()) return;
+    if (!question || !answer.trim()) return;
     setStatus("Grading…");
     const token = await getToken();
-    const res = await fetch(`${API_URL}/questions/${flashcard.id}/answer`, {
+    const res = await fetch(`${API_URL}/questions/${question.id}/answer`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -74,6 +75,29 @@ export default function ReviewPage({ params }: { params: Promise<{ id: string }>
     setStatus(`Verdict: ${review.verdict} — next due ${new Date(review.next_due_at).toLocaleDateString()}`);
   }
 
+  /** One click replaces the AI verdict; scheduling follows the final verdict. */
+  async function overrideVerdict(verdict: Review["verdict"]) {
+    if (!result) return;
+    const token = await getToken();
+    const res = await fetch(`${API_URL}/reviews/${result.id}/override`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ verdict }),
+    });
+    if (!res.ok) {
+      setStatus(`Override failed (${res.status})`);
+      return;
+    }
+    const updated: Review = await res.json();
+    setResult(updated);
+    setStatus(
+      `Verdict overridden to ${updated.verdict} — next due ${new Date(updated.next_due_at).toLocaleDateString()}`,
+    );
+  }
+
   async function nextConcept() {
     setResult(null);
     setAnswer("");
@@ -84,10 +108,26 @@ export default function ReviewPage({ params }: { params: Promise<{ id: string }>
     <main style={{ fontFamily: "system-ui", maxWidth: 640, margin: "40px auto", padding: 16 }}>
       <h1>Review</h1>
       <p>{status}</p>
-      {current && flashcard && !result && (
+      {current && !result && (
+        <p>
+          <label>
+            <input
+              type="radio"
+              checked={mode === "flashcard"}
+              onChange={() => setMode("flashcard")}
+            />{" "}
+            Flashcard
+          </label>{" "}
+          <label>
+            <input type="radio" checked={mode === "written"} onChange={() => setMode("written")} />{" "}
+            Written explanation
+          </label>
+        </p>
+      )}
+      {current && question && !result && (
         <form onSubmit={submitAnswer}>
           <h2>{current.name}</h2>
-          <p>{flashcard.prompt}</p>
+          <p>{question.prompt}</p>
           <textarea
             value={answer}
             onChange={(e) => setAnswer(e.target.value)}
@@ -102,8 +142,26 @@ export default function ReviewPage({ params }: { params: Promise<{ id: string }>
       )}
       {result && (
         <section style={{ border: "1px solid #ccc", padding: 12 }}>
-          <h2>Verdict: {result.verdict}</h2>
+          <h2>
+            Verdict: {result.verdict}
+            {result.verdict_overridden ? ` (AI said ${result.ai_verdict})` : ""}
+          </h2>
           <p>Next due: {new Date(result.next_due_at).toLocaleString()}</p>
+          <p>
+            Disagree?{" "}
+            {(["fail", "partial", "pass", "strong"] as const)
+              .filter((v) => v !== result.verdict)
+              .map((v) => (
+                <button
+                  key={v}
+                  type="button"
+                  onClick={() => overrideVerdict(v)}
+                  style={{ marginRight: 4 }}
+                >
+                  {v}
+                </button>
+              ))}
+          </p>
           {result.feedback.correct_points.length > 0 && (
             <>
               <h3>Correct</h3>

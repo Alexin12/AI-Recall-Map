@@ -1,6 +1,7 @@
 """Review endpoints: due list, flashcard answering with grading, rescheduling."""
 
 from datetime import datetime
+from typing import Literal
 
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel
@@ -63,13 +64,19 @@ class Feedback(BaseModel):
 
 
 class Review(BaseModel):
-    """One persisted review attempt on a Concept."""
+    """One persisted review attempt on a Concept.
+
+    `verdict` is the final verdict the Scheduler reads; `ai_verdict` is what
+    the AI originally said. They differ only after a user override.
+    """
 
     id: str
     concept_id: str
     question_id: str
     answer: str
     verdict: str
+    ai_verdict: str
+    verdict_overridden: bool
     feedback: Feedback
     next_due_at: datetime
     created_at: datetime
@@ -101,10 +108,10 @@ async def answer_question(question_id: str, body: AnswerBody, conn: UserConn) ->
     row = (
         await conn.execute(
             text(
-                "INSERT INTO reviews (concept_id, question_id, answer, verdict, feedback) "
-                "VALUES (:concept_id, :question_id, :answer, :verdict, "
+                "INSERT INTO reviews (concept_id, question_id, answer, verdict, ai_verdict, "
+                "feedback) VALUES (:concept_id, :question_id, :answer, :verdict, :verdict, "
                 "CAST(:feedback AS jsonb)) "
-                "RETURNING id, concept_id, question_id, answer, verdict, created_at"
+                "RETURNING id, concept_id, question_id, answer, verdict, ai_verdict, created_at"
             ),
             {
                 "concept_id": str(question.concept_id),
@@ -126,6 +133,8 @@ async def answer_question(question_id: str, body: AnswerBody, conn: UserConn) ->
         question_id=str(row.question_id),
         answer=row.answer,
         verdict=row.verdict,
+        ai_verdict=row.ai_verdict,
+        verdict_overridden=False,
         feedback=feedback,
         next_due_at=due_at,
         created_at=row.created_at,
@@ -143,8 +152,8 @@ async def list_reviews(concept_id: str, conn: UserConn) -> list[Review]:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Concept not found")
     rows = await conn.execute(
         text(
-            "SELECT id, concept_id, question_id, answer, verdict, feedback, created_at "
-            "FROM reviews WHERE concept_id = :concept_id ORDER BY created_at DESC"
+            "SELECT id, concept_id, question_id, answer, verdict, ai_verdict, feedback, "
+            "created_at FROM reviews WHERE concept_id = :concept_id ORDER BY created_at DESC"
         ),
         {"concept_id": concept_id},
     )
@@ -155,9 +164,50 @@ async def list_reviews(concept_id: str, conn: UserConn) -> list[Review]:
             question_id=str(r.question_id),
             answer=r.answer,
             verdict=r.verdict,
+            ai_verdict=r.ai_verdict,
+            verdict_overridden=r.verdict != r.ai_verdict,
             feedback=Feedback(**r.feedback),
             next_due_at=concept.next_due_at,
             created_at=r.created_at,
         )
         for r in rows
     ]
+
+
+class OverrideBody(BaseModel):
+    """The learner's replacement verdict."""
+
+    verdict: Literal["fail", "partial", "pass", "strong"]
+
+
+@router.post("/reviews/{review_id}/override", response_model=Review)
+async def override_verdict(review_id: str, body: OverrideBody, conn: UserConn) -> Review:
+    """Replace the AI verdict with the learner's; reschedule from the final verdict."""
+    result = await conn.execute(
+        text(
+            "UPDATE reviews SET verdict = :verdict WHERE id = :id "
+            "RETURNING id, concept_id, question_id, answer, verdict, ai_verdict, "
+            "feedback, created_at"
+        ),
+        {"verdict": body.verdict, "id": review_id},
+    )
+    row = result.first()
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Review not found")
+    due_at = next_due(row.verdict, row.created_at)
+    await conn.execute(
+        text("UPDATE concepts SET next_due_at = :due_at WHERE id = :id"),
+        {"due_at": due_at, "id": str(row.concept_id)},
+    )
+    return Review(
+        id=str(row.id),
+        concept_id=str(row.concept_id),
+        question_id=str(row.question_id),
+        answer=row.answer,
+        verdict=row.verdict,
+        ai_verdict=row.ai_verdict,
+        verdict_overridden=row.verdict != row.ai_verdict,
+        feedback=Feedback(**row.feedback),
+        next_due_at=due_at,
+        created_at=row.created_at,
+    )
