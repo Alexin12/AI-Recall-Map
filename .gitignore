@@ -23,3 +23,6 @@ venv/
 
 # Supabase Studio scratch snippets (auto-generated, not project code)
 supabase/snippets/
+
+#User
+Deprecated/
