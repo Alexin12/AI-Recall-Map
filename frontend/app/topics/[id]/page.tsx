@@ -33,6 +33,7 @@ export default function TopicPage({ params }: { params: Promise<{ id: string }> 
   const [pending, setPending] = useState<Concept[]>([]);
   const [pendingMaterialId, setPendingMaterialId] = useState<string | null>(null);
   const [concepts, setConcepts] = useState<Concept[]>([]);
+  const [due, setDue] = useState<Concept[]>([]);
   const [map, setMap] = useState<ConceptMapData | null>(null);
   const [goalSet, setGoalSet] = useState<boolean | null>(null);
 
@@ -56,6 +57,15 @@ export default function TopicPage({ params }: { params: Promise<{ id: string }> 
     if (mapRes.ok) setMap(await mapRes.json());
   }
 
+  /** Scheduled Concepts of this Topic that are due for review right now. */
+  async function loadDue() {
+    const token = await getToken();
+    const res = await fetch(`${API_URL}/topics/${id}/due`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (res.ok) setDue(await res.json());
+  }
+
   async function loadMaterials() {
     const token = await getToken();
     const res = await fetch(`${API_URL}/topics/${id}/materials`, {
@@ -73,6 +83,7 @@ export default function TopicPage({ params }: { params: Promise<{ id: string }> 
   useEffect(() => {
     loadMaterials().catch((e) => setStatus(String(e)));
     loadConcepts().catch(() => {});
+    loadDue().catch(() => {});
     loadGoal().catch(() => {});
   }, []);
 
@@ -169,6 +180,7 @@ export default function TopicPage({ params }: { params: Promise<{ id: string }> 
     setPendingMaterialId(null);
     setStatus(`Confirmed ${confirmed.length} concept(s)`);
     await loadConcepts();
+    await loadDue();
   }
 
   async function pasteMaterial(e: React.FormEvent) {
@@ -311,6 +323,21 @@ export default function TopicPage({ params }: { params: Promise<{ id: string }> 
             ))}
           </ul>
         </>
+      )}
+      <h2>Due for review</h2>
+      {due.length > 0 ? (
+        <>
+          <p>{due.length} concept(s) due now:</p>
+          <ul>
+            {due.map((c) => (
+              <li key={c.id}>
+                <Link href={`/concepts/${c.id}`}>{c.name}</Link>
+              </li>
+            ))}
+          </ul>
+        </>
+      ) : (
+        <p>Nothing due right now — all caught up.</p>
       )}
       <p>
         <Link href={`/topics/${id}/review`}>Start review</Link>
