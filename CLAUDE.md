@@ -69,16 +69,17 @@ UV_CACHE_DIR="$TMPDIR/uv-cache" uv run pytest tests/test_confirmation.py -v
 
 Swap in the test file(s) that actually cover the PR, or run the whole suite with `uv run pytest -v`. Passing tests are necessary but not sufficient — a green suite can still hide an end-to-end gap (e.g. no test asserts the rule the user cares about), so say so when it applies.
 
-**B. A suspect-location table** mapping each acceptance-criteria bullet to the files to inspect and the exact place a bug would live. Three columns, in this order:
+**B. A suspect-location table** mapping each acceptance-criteria bullet to the files to inspect and the exact place a bug would live. Four columns, in this order:
 
-| Bullet point (from the issue/PR) | Related file(s) | Suspect location — function/variable names only, no code, and why |
-|---|---|---|
+| Bullet point (from the issue/PR) | What it means (plain language) | Related file(s) | Suspect location — function/variable names only, no code, and why |
+|---|---|---|---|
 
-- Column 1: one acceptance-criteria bullet from the issue/PR.
-- Column 2: the file(s) that implement that bullet.
-- Column 3: the specific function name, SQL clause, or variable where a bug would show up, plus a short "why" — names only, never pasted code.
+- Column 1: one acceptance-criteria bullet from the issue/PR, copied as-is.
+- Column 2: the same bullet restated in plain language, or as an everyday analogy — what feature this checks and what "working" looks like, written for someone who does not know terms like "route", "verdict", "stub", or "LLM". No jargon; if a technical word is unavoidable, gloss it in the same cell.
+- Column 3: the file(s) that implement that bullet.
+- Column 4: the specific place a bug would show up. Never assume the reader knows what a function does. Write it as: (1) name the first suspect function/SQL clause/variable **and say in a few plain words what that function does**; (2) name the second one **and say what it does too**; then (3) one short "why" — why these two are where this bullet would break. Names only, never pasted code.
 
-The point of the table is that when a bullet misbehaves end-to-end, the user can jump straight to the file and function to inspect (backend route vs. scheduler vs. frontend component) instead of guessing.
+The point of the table is that when a bullet misbehaves end-to-end, the user can read column 2 to understand what should happen, then jump straight to the file and function in columns 3–4 to inspect (backend route vs. scheduler vs. frontend component) instead of guessing.
 
 ### gh failures with `x509: OSStatus -26276`: stop retrying, hand the command to the user
 
