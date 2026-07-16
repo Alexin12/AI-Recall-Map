@@ -27,6 +27,8 @@ async def extract_three(client, auth, monkeypatch) -> str:
             concept_of("irrelevant", "Irrelevant idea"),
         ],
     )
+    # A Goal must be set for "core" relevance to survive (issue #26).
+    await client.put("/goal", json={"content": "Learn the idea"}, headers=auth)
     topic_id = await make_topic(client, auth)
     material_id = await make_material(client, auth, topic_id)
     await client.post(f"/materials/{material_id}/extract", headers=auth)
@@ -97,6 +99,7 @@ async def test_confirm_marks_remaining_concepts_confirmed(client, make_user, mon
         monkeypatch,
         concepts=[concept_of("core", "Core idea"), concept_of("supporting", "Supporting idea")],
     )
+    await client.put("/goal", json={"content": "Learn the idea"}, headers=auth)
     topic_id = await make_topic(client, auth)
     material_id = await make_material(client, auth, topic_id)
     await client.post(f"/materials/{material_id}/extract", headers=auth)

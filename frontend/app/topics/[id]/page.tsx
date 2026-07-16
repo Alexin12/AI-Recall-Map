@@ -34,6 +34,15 @@ export default function TopicPage({ params }: { params: Promise<{ id: string }> 
   const [pendingMaterialId, setPendingMaterialId] = useState<string | null>(null);
   const [concepts, setConcepts] = useState<Concept[]>([]);
   const [map, setMap] = useState<ConceptMapData | null>(null);
+  const [goalSet, setGoalSet] = useState<boolean | null>(null);
+
+  async function loadGoal() {
+    const token = await getToken();
+    const res = await fetch(`${API_URL}/goal`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    setGoalSet(res.ok); // 404 means no Goal is set yet
+  }
 
   async function loadConcepts() {
     const token = await getToken();
@@ -64,6 +73,7 @@ export default function TopicPage({ params }: { params: Promise<{ id: string }> 
   useEffect(() => {
     loadMaterials().catch((e) => setStatus(String(e)));
     loadConcepts().catch(() => {});
+    loadGoal().catch(() => {});
   }, []);
 
   /** Call the extraction endpoint and render each streamed NDJSON progress event. */
@@ -193,6 +203,20 @@ export default function TopicPage({ params }: { params: Promise<{ id: string }> 
     <main style={{ fontFamily: "system-ui", maxWidth: 640, margin: "40px auto", padding: 16 }}>
       <h1>Topic</h1>
       <p>Topic id: {id}</p>
+      {goalSet === false && (
+        <div
+          style={{
+            border: "1px solid #e0b400",
+            background: "#fff8e1",
+            padding: 12,
+            marginBottom: 16,
+          }}
+        >
+          <strong>No Goal set.</strong> Without a Goal, relevance can&apos;t be judged, so
+          nothing is marked <em>core</em> or scheduled for review.{" "}
+          <Link href="/goal">Set your Goal first</Link> to get goal-based filtering.
+        </div>
+      )}
       <form onSubmit={pasteMaterial}>
         <textarea
           value={content}
@@ -209,6 +233,11 @@ export default function TopicPage({ params }: { params: Promise<{ id: string }> 
       {pending.length > 0 && (
         <section style={{ border: "1px solid #ccc", padding: 12, marginBottom: 16 }}>
           <h2>Confirm extracted concepts</h2>
+          {goalSet === false && (
+            <p style={{ color: "#8a6d00" }}>
+              No Goal set — relevance not judged. Set a Goal to mark concepts as core.
+            </p>
+          )}
           <ul style={{ listStyle: "none", padding: 0 }}>
             {pending.map((c) => (
               <li key={c.id} style={{ borderBottom: "1px solid #eee", padding: "8px 0" }}>
@@ -229,8 +258,10 @@ export default function TopicPage({ params }: { params: Promise<{ id: string }> 
                   style={{ width: "100%", marginBottom: 4 }}
                 />
                 <small>
-                  “{c.source_snippet}” — {c.goal_relevance}, confidence{" "}
-                  {Math.round(c.confidence * 100)}%
+                  “{c.source_snippet}” — {c.goal_relevance},{" "}
+                  <span title="How sure the extractor is that this is a real, distinct concept worth learning — not how relevant it is to your Goal.">
+                    concept confidence {Math.round(c.confidence * 100)}%
+                  </span>
                 </small>
                 <div>
                   <label>
