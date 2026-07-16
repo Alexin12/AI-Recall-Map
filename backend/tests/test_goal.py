@@ -67,6 +67,16 @@ async def test_rls_hides_goal_across_users(client, make_user):
     assert (await client.get("/goal", headers=auth_a)).json()["content"] == "A's goal"
 
 
+async def test_put_rejects_empty_goal(client, make_user):
+    """An empty or whitespace-only Goal is as useless as no Goal, so reject it."""
+    _, auth = await make_user()
+
+    assert (await client.put("/goal", json={"content": ""}, headers=auth)).status_code == 422
+    assert (await client.put("/goal", json={"content": "   "}, headers=auth)).status_code == 422
+    # Nothing was persisted.
+    assert (await client.get("/goal", headers=auth)).status_code == 404
+
+
 async def test_unauthenticated_is_rejected(client):
     assert (await client.get("/goal")).status_code == 401
     assert (await client.put("/goal", json={"content": "x"})).status_code == 401

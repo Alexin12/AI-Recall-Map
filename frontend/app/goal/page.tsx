@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 
 import { supabase } from "@/lib/supabaseClient";
 import type { Goal } from "@/types";
@@ -38,6 +39,10 @@ export default function GoalPage() {
   }
 
   async function saveGoal() {
+    if (!content.trim()) {
+      setStatus("Goal cannot be empty.");
+      return;
+    }
     setStatus("Saving…");
     const res = await fetch(`${API_URL}/goal`, {
       method: "PUT",
@@ -84,6 +89,9 @@ export default function GoalPage() {
           Saved: {goal.content} <small>(updated {goal.updated_at})</small>
         </p>
       )}
+      <p>
+        <Link href="/topics">← Back to topics</Link>
+      </p>
     </main>
   );
 }

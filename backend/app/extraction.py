@@ -141,6 +141,16 @@ async def extract_material(material_id: str, conn: UserConn) -> StreamingRespons
         yield event({"type": "progress", "stage": "extracting"})
         try:
             extracted = await llm_extract_concepts(material.content, goal)
+            # No Goal means relevance can't be judged, so cap "core" at
+            # "supporting" — otherwise every Material's own content reads as
+            # core and floods review (issue #26).
+            if goal is None:
+                extracted = [
+                    e.model_copy(update={"goal_relevance": "supporting"})
+                    if e.goal_relevance == "core"
+                    else e
+                    for e in extracted
+                ]
             yield event({"type": "progress", "stage": "saving", "count": len(extracted)})
             concepts = [await insert_concept(conn, material, e) for e in extracted]
             yield event(

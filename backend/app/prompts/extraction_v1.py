@@ -12,8 +12,8 @@ Concepts it teaches. For each Concept provide:
   Concept comes from. Copy it verbatim; do not paraphrase.
 - goal_relevance: how relevant the Concept is to the user's stated learning
   Goal — "core" (directly advances the Goal), "supporting" (useful background),
-  or "irrelevant" (unrelated to the Goal). If no Goal is given, judge by how
-  central the Concept is to the Material itself.
+  or "irrelevant" (unrelated to the Goal). If no Goal is given, relevance
+  cannot be judged: use at most "supporting", never "core".
 - confidence: 0-1, how confident you are that this is a real, distinct Concept
   worth learning from this Material.
 - flashcard_prompt: one short recall question testing the Concept.
