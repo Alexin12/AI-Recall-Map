@@ -3,7 +3,7 @@
 from datetime import datetime
 
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from sqlalchemy import text
 
 from app.deps import UserConn
@@ -15,6 +15,15 @@ class GoalWrite(BaseModel):
     """Request body for setting or editing the Goal."""
 
     content: str
+
+    @field_validator("content")
+    @classmethod
+    def not_blank(cls, v: str) -> str:
+        """A blank Goal can't be judged against, so reject it (422)."""
+        v = v.strip()
+        if not v:
+            raise ValueError("Goal cannot be empty")
+        return v
 
 
 class Goal(BaseModel):

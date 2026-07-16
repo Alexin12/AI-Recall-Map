@@ -43,3 +43,47 @@ The user is a beginner (no prior coding/deployment background) learning this sta
 A running log of concrete mistakes made on this project, so a future Claude instance does not
 retry them. See `lab-notebook.md` at the repo root; append new entries there, newest at the
 bottom.
+
+
+### PR Testing Guidance
+
+Whenever the user asks how to test a PR before merging, inspect the actual PR changes first and explain the testing plan using this exact structure:
+
+
+1. **Expected successful result**
+   - Describe the visible result and any expected data changes.
+
+2. **Possible failure points**
+   - List realistic places where the flow could fail and what the user would observe.
+
+Base the answer on the actual code and PR diff. Do not guess. Keep the explanation concise and beginner-friendly. The user should understand the feature's behavior without needing to understand every line of code.
+
+In addition to the 2-part structure above, whenever the user asks how to test an issue or PR, always also provide:
+
+**A. The exact terminal command to run the whole test suite for those PRs.** Give a copy-paste block, not a description. For this repo's backend that is:
+
+```bash
+cd backend
+UV_CACHE_DIR="$TMPDIR/uv-cache" uv run pytest tests/test_confirmation.py -v
+```
+
+Swap in the test file(s) that actually cover the PR, or run the whole suite with `uv run pytest -v`. Passing tests are necessary but not sufficient — a green suite can still hide an end-to-end gap (e.g. no test asserts the rule the user cares about), so say so when it applies.
+
+**B. A suspect-location table** mapping each acceptance-criteria bullet to the files to inspect and the exact place a bug would live. Three columns, in this order:
+
+| Bullet point (from the issue/PR) | Related file(s) | Suspect location — function/variable names only, no code, and why |
+|---|---|---|
+
+- Column 1: one acceptance-criteria bullet from the issue/PR.
+- Column 2: the file(s) that implement that bullet.
+- Column 3: the specific function name, SQL clause, or variable where a bug would show up, plus a short "why" — names only, never pasted code.
+
+The point of the table is that when a bullet misbehaves end-to-end, the user can jump straight to the file and function to inspect (backend route vs. scheduler vs. frontend component) instead of guessing.
+
+### gh failures with `x509: OSStatus -26276`: stop retrying, hand the command to the user
+
+The sandbox denies reading `~/Library`, where macOS keeps the Keychain (gh's token) and the
+certificate trust store, so `gh` calls fail intermittently with `tls: failed to verify
+certificate: x509: OSStatus -26276`. REST vs GraphQL, retry loops, and `curl` + `gh auth token`
+all dead-end (see `lab-notebook.md`, 2026-07-15). After ~2 failures with this error, do not keep
+trying — print a paste-ready command for the user to run in their own terminal instead.
