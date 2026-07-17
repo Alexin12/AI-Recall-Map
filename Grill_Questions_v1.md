@@ -2,6 +2,8 @@
 
 All questions below are decided (interview completed 2026-07-11). [Plan_v1.md](Plan_v1.md) is the single source of truth for the full design; this file records each question's final answer and, where relevant, why.
 
+> **⚠️ Post-M1 redesign (2026-07-17):** a large architecture change supersedes several answers below — dashboard input + Concept-level auto-routing, Goal moved down to per-Topic, and the Concept Map changed from a relationship graph to a hierarchy tree. Superseded answers are flagged inline. See [Wayfinder map #44](https://github.com/Alexin12/AI-Recall-Map/issues/44), [User_read/Changes_before_M2.md](User_read/Changes_before_M2.md), and ADRs [0002 product identity](docs/adr/0002-active-recall-gym-not-knowledge-organizer.md), [0005 routing](backend/docs/adr/0005-dashboard-input-concept-level-routing.md), [0006 goal-per-Topic](backend/docs/adr/0006-goal-per-topic-two-phase-relevance.md), [0007 concept tree](backend/docs/adr/0007-concept-map-as-hierarchy-tree.md).
+
 Canonical terms (defined in Plan_v1.md): Goal, Topic, Material, Concept, Question, Review, Concept Map.
 
 ## Product Definition
@@ -26,6 +28,7 @@ The learner can recognize the concept (flashcard), explain it in their own words
 
 ### 7. What does "concept map" mean?
 A visual graph of Concepts and relationship edges inside a Topic, used for navigation: click a node to open that Concept's detail page. Not decoration.
+> **Superseded (ADR-0007):** the Concept Map is now a **hierarchy tree** (big Concept expands into sub-Concepts), not a relationship-edge graph. Navigation-by-click and gap-finding remain; user-drawn edges are dropped.
 
 ### 8. What is the first successful session?
 Add one Material → get useful Concepts and Questions → answer by typing → review at least one Concept and see what is due next → see a basic read-only map (one node counts).
@@ -55,6 +58,7 @@ Yes: approve, edit, or delete on the post-extraction confirmation screen.
 
 ### 16. Should every concept become a review item?
 No. The user sets a Goal (e.g. "become an AI engineer within a year"). The LLM uses the Goal to mark each Concept irrelevant / supporting / core. On the confirmation screen, core Concepts are pre-checked for scheduling; the user can toggle, edit, or delete. Confirmed core Concepts enter the schedule; supporting ones stay browsable but never due.
+> **Superseded (ADR-0006):** Goal is now **per-Topic**, not global. Relevance is scored in a second phase (only for Topics with a Goal) and **auto-applied** after confirm — the pre-check/toggle no longer lives on the confirmation screen; the user overrides on the **Topic page** via a per-Concept relevance column. A Topic with no Goal schedules nothing and leaves `goal_relevance` null.
 
 ## Learning System
 
@@ -118,6 +122,7 @@ Goal, Topic, Material, Concept, Question, Review, Concept Map — used identical
 
 ### 35. "Mind Map" or "Concept Map"?
 Concept Map.
+> **Note (ADR-0007):** the name "Concept Map" is kept, but its structure is now a hierarchy tree rather than a relationship-edge graph.
 
 ### 36. Should a concept belong to one material or many?
 Created from one Material; merging across Materials comes in milestone 3.
@@ -138,6 +143,7 @@ Yes — stored with each Review attempt.
 
 ### 41. What is the first screen after sign-in?
 The global home: today's due queue, mastery squares (red = failed last time, blue = normal pass, green = strong pass), next-5-days review plan, recently learned list, and Topic list.
+> **Superseded (ADR-0005):** the Global Home is now also the **single input point** — the user pastes new Material here, and its Concepts are auto-routed to Topics. The per-Topic paste path is removed.
 
 ### 42. What should the dashboard prioritize?
 Due queue first, then recently learned Concepts, then Topics.
@@ -205,6 +211,8 @@ No.
 V1: delete Materials and generated study artifacts. Full account deletion later.
 
 ## MVP Decision
+
+> **Superseded — milestones renumbered (2026-07-17, Wayfinder map #44):** M1 (core loop) is done. The post-M1 redesign becomes the **new M2** (re-foundation, 3 slices: Goal→Topic; Home input + Concept-level auto-routing + inbox; Concept Map → hierarchy tree). The old M2 (dashboards) → **M3**; the old M3 (grading depth + Concept merging) → **M4**; interleaving and the "memory tree" gamification land in M4/later. Q62–Q66 below describe the *old* numbering.
 
 ### 61. Which plan should be built first?
 The rewritten Plan_v1.md, milestone 1 first.
