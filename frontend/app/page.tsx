@@ -8,6 +8,13 @@ import type { Concept, Topic } from "@/types";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL!;
 
+/** One proposed Topic from the extraction stream, edited in place before confirming. */
+type Proposal = {
+  name: string;
+  goal: string;
+  concept_ids: string[];
+};
+
 /** Reuse the current session or sign a throwaway demo user up (same demo auth everywhere). */
 async function getToken(): Promise<string> {
   const { data } = await supabase.auth.getSession();
@@ -31,6 +38,7 @@ export default function Home() {
   const [topics, setTopics] = useState<Topic[]>([]);
   const [routed, setRouted] = useState<Concept[]>([]);
   const [inbox, setInbox] = useState<Concept[]>([]);
+  const [proposals, setProposals] = useState<Proposal[]>([]);
 
   async function loadTopics() {
     const token = await getToken();
@@ -105,6 +113,11 @@ export default function Home() {
           } else if (event.type === "result") {
             gotResult = true;
             setRouted(event.concepts);
+            setProposals(
+              (event.proposals ?? []).map(
+                (p: { name: string; concept_ids: string[] }) => ({ ...p, goal: "" }),
+              ),
+            );
           }
         }
       }
@@ -123,6 +136,50 @@ export default function Home() {
     });
     setStatus("Routed — see where each concept landed below");
     await loadInbox();
+  }
+
+  /** Confirm one proposed Topic: create it (with its optional Goal) and file
+   * its Concepts in — the backend scores them against the Goal on the way. */
+  async function confirmProposal(index: number) {
+    const proposal = proposals[index];
+    if (!proposal.name.trim()) return;
+    setStatus(`Creating topic "${proposal.name}"…`);
+    const token = await getToken();
+    const res = await fetch(`${API_URL}/topics`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        name: proposal.name.trim(),
+        goal: proposal.goal.trim() || null,
+      }),
+    });
+    if (!res.ok) {
+      setStatus(`Topic creation failed (${res.status})`);
+      return;
+    }
+    const topic: Topic = await res.json();
+    for (const conceptId of proposal.concept_ids) {
+      await fetch(`${API_URL}/concepts/${conceptId}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ topic_id: topic.id }),
+      });
+    }
+    setProposals((prev) => prev.filter((_, i) => i !== index));
+    setStatus(`Created "${topic.name}" and filed ${proposal.concept_ids.length} concept(s)`);
+    await loadTopics();
+    await loadInbox();
+  }
+
+  /** Dismiss a proposal: its Concepts simply stay in the inbox. */
+  function dismissProposal(index: number) {
+    setProposals((prev) => prev.filter((_, i) => i !== index));
   }
 
   /** File an unclassified Concept into a Topic. */
@@ -166,6 +223,45 @@ export default function Home() {
         </button>
       </form>
       <p>{status}</p>
+      {proposals.length > 0 && (
+        <section style={{ border: "1px solid #e0b400", padding: 12, marginBottom: 16 }}>
+          <h2>Proposed new topics — confirm before anything is created</h2>
+          {proposals.map((p, i) => (
+            <div key={i} style={{ borderBottom: "1px solid #eee", padding: "8px 0" }}>
+              <input
+                value={p.name}
+                onChange={(e) =>
+                  setProposals((prev) =>
+                    prev.map((q, j) => (j === i ? { ...q, name: e.target.value } : q)),
+                  )
+                }
+                style={{ fontWeight: "bold", padding: 6, marginRight: 8 }}
+              />
+              <input
+                value={p.goal}
+                onChange={(e) =>
+                  setProposals((prev) =>
+                    prev.map((q, j) => (j === i ? { ...q, goal: e.target.value } : q)),
+                  )
+                }
+                placeholder="Optional goal for this topic"
+                style={{ padding: 6, width: "45%", marginRight: 8 }}
+              />
+              <button type="button" onClick={() => confirmProposal(i)}>
+                Create topic
+              </button>{" "}
+              <button type="button" onClick={() => dismissProposal(i)}>
+                Keep in inbox
+              </button>
+              <ul style={{ margin: "4px 0" }}>
+                {p.concept_ids.map((cid) => (
+                  <li key={cid}>{routed.find((c) => c.id === cid)?.name ?? cid}</li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </section>
+      )}
       {routed.length > 0 && (
         <section style={{ border: "1px solid #ccc", padding: 12, marginBottom: 16 }}>
           <h2>Where your concepts landed</h2>

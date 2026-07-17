@@ -55,7 +55,9 @@ async def edit_concept(concept_id: str, body: ConceptEdit, conn: UserConn) -> Co
     """
     if body.goal_relevance is not None and body.scheduled is None:
         body.scheduled = body.goal_relevance in ("core", "supporting")
-    if body.topic_id is not None:
+    # topic_id omitted = keep; explicit null = drop to the inbox (ADR-0005).
+    moving = "topic_id" in body.model_fields_set
+    if moving and body.topic_id is not None:
         found = await conn.execute(
             text("SELECT id FROM topics WHERE id = :id"), {"id": body.topic_id}
         )
@@ -68,7 +70,7 @@ async def edit_concept(concept_id: str, body: ConceptEdit, conn: UserConn) -> Co
             "explanation = COALESCE(:explanation, explanation), "
             "scheduled = COALESCE(:scheduled, scheduled), "
             "goal_relevance = COALESCE(:goal_relevance, goal_relevance), "
-            "topic_id = COALESCE(:topic_id, topic_id) "
+            "topic_id = CASE WHEN :moving THEN CAST(:topic_id AS uuid) ELSE topic_id END "
             f"WHERE id = :id RETURNING {CONCEPT_COLUMNS}"
         ),
         {
@@ -78,13 +80,14 @@ async def edit_concept(concept_id: str, body: ConceptEdit, conn: UserConn) -> Co
             "scheduled": body.scheduled,
             "goal_relevance": body.goal_relevance,
             "topic_id": body.topic_id,
+            "moving": moving,
         },
     )
     row = result.first()
     if row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Concept not found")
     concept = concept_from_row(row)
-    if body.topic_id is not None:
+    if moving:
         concept = await rescore_moved_concept(conn, concept)
     return concept
 
