@@ -78,7 +78,7 @@ async def test_full_core_loop(client, make_user, monkeypatch):
     assert detail["due"] is True
     assert len(detail["reviews"]) == 1
 
-    # 8. The Concept Map shows the surviving Concept as a node.
+    # 8. The Concept Map shows the surviving Concept as a tree root (ADR-0007).
     map_body = (await client.get(f"/topics/{topic_id}/map", headers=auth)).json()
-    assert [n["name"] for n in map_body["nodes"]] == ["Ser vs estar"]
-    assert map_body["relationships"] == []
+    assert [n["name"] for n in map_body["tree"]] == ["Ser vs estar"]
+    assert map_body["tree"][0]["children"] == []

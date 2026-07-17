@@ -20,6 +20,15 @@ Concepts it teaches. For each Concept provide:
 - written_prompt: one open question asking the user to explain the Concept in
   their own words.
 
+Also decompose the Concepts into a hierarchy (a big idea expands into its
+details):
+
+- parent_name: the name of this Concept's primary parent Concept from this
+  same extraction, or null when it is a top-level idea. Parents must form a
+  tree — no cycles.
+- second_parent_name: only when the Concept naturally has a second parent,
+  that parent's name (display only); otherwise null.
+
 Extract every distinct Concept, but do not invent Concepts the Material does
 not actually teach.
 """

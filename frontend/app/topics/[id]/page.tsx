@@ -192,7 +192,7 @@ export default function TopicPage({ params }: { params: Promise<{ id: string }> 
           </li>
         ))}
       </ul>
-      {map && map.nodes.length > 0 && (
+      {map && map.tree.length > 0 && (
         <>
           <h2>Concept Map</h2>
           <ConceptMap map={map} />

@@ -141,6 +141,25 @@ async def insert_concept(
     )
 
 
+async def link_parents(conn, extracted, concepts: list[Concept]) -> None:
+    """Persist the hierarchy (ADR-0007): resolve each Concept's parent_name to
+    its sibling from the same extraction; unknown or self parents stay roots."""
+    ids_by_name = {c.name: c.id for c in concepts}
+    for e, c in zip(extracted, concepts):
+        parent_id = ids_by_name.get(e.parent_name) if e.parent_name else None
+        if parent_id == c.id:
+            parent_id = None
+        if parent_id is None and e.second_parent_name is None:
+            continue
+        await conn.execute(
+            text(
+                "UPDATE concepts SET parent_concept_id = :parent_id, "
+                "second_parent_name = :second WHERE id = :id"
+            ),
+            {"id": c.id, "parent_id": parent_id, "second": e.second_parent_name},
+        )
+
+
 async def score_routed_concepts(conn, topics: list[dict], concepts: list[Concept]) -> None:
     """Phase 2 for the routed flow (ADR-0006): score the just-routed Concepts of
     each Goal-carrying Topic and schedule core/supporting; mirror onto the models."""
@@ -204,6 +223,7 @@ async def extract_material(material_id: str, conn: UserConn) -> StreamingRespons
                     await insert_concept(conn, material, e, goal=None, topic_id=route)
                     for e, route in zip(extracted, routes)
                 ]
+                await link_parents(conn, extracted, concepts)
                 await score_routed_concepts(conn, topics, concepts)
                 # Orphans are clustered into a few broad proposed Topics —
                 # proposals only; the user confirms before anything is created.
@@ -231,6 +251,7 @@ async def extract_material(material_id: str, conn: UserConn) -> StreamingRespons
                 return
             yield event({"type": "progress", "stage": "saving", "count": len(extracted)})
             concepts = [await insert_concept(conn, material, e, goal) for e in extracted]
+            await link_parents(conn, extracted, concepts)
             yield event(
                 {"type": "result", "concepts": [c.model_dump(mode="json") for c in concepts]}
             )
