@@ -39,7 +39,7 @@ class Concept(BaseModel):
     name: str
     explanation: str
     source_snippet: str
-    goal_relevance: str
+    goal_relevance: str | None
     confidence: float
     scheduled: bool
     confirmed: bool
@@ -59,14 +59,16 @@ async def require_own_material(material_id: str, conn):
     return row
 
 
-async def fetch_goal(conn) -> str | None:
-    """Return the user's Goal content, or None if not set."""
-    result = await conn.execute(text("SELECT content FROM goals"))
+async def fetch_topic_goal(conn, topic_id) -> str | None:
+    """Return the Topic's Goal (ADR-0006: Goal lives on the Topic), or None."""
+    result = await conn.execute(
+        text("SELECT goal FROM topics WHERE id = :id"), {"id": str(topic_id)}
+    )
     row = result.first()
-    return row.content if row else None
+    return row.goal if row else None
 
 
-async def insert_concept(conn, material, extracted) -> Concept:
+async def insert_concept(conn, material, extracted, goal: str | None) -> Concept:
     """Persist one extracted Concept plus its flashcard and written Questions."""
     row = (
         await conn.execute(
@@ -84,10 +86,11 @@ async def insert_concept(conn, material, extracted) -> Concept:
                 "name": extracted.name,
                 "explanation": extracted.explanation,
                 "source_snippet": extracted.source_snippet,
-                "goal_relevance": extracted.goal_relevance,
+                # No Goal on the Topic means relevance is unknowable: leave it
+                # NULL and schedule nothing (ADR-0006).
+                "goal_relevance": extracted.goal_relevance if goal else None,
                 "confidence": extracted.confidence,
-                # Scheduling default: core Concepts enter review, others stay browsable.
-                "scheduled": extracted.goal_relevance == "core",
+                "scheduled": bool(goal) and extracted.goal_relevance in ("core", "supporting"),
             },
         )
     ).one()
@@ -129,7 +132,7 @@ async def insert_concept(conn, material, extracted) -> Concept:
 async def extract_material(material_id: str, conn: UserConn) -> StreamingResponse:
     """Extract Concepts from a Material, streaming NDJSON progress then the result."""
     material = await require_own_material(material_id, conn)
-    goal = await fetch_goal(conn)
+    goal = await fetch_topic_goal(conn, material.topic_id)
 
     async def stream():
         def event(payload: dict) -> str:
@@ -141,18 +144,8 @@ async def extract_material(material_id: str, conn: UserConn) -> StreamingRespons
         yield event({"type": "progress", "stage": "extracting"})
         try:
             extracted = await llm_extract_concepts(material.content, goal)
-            # No Goal means relevance can't be judged, so cap "core" at
-            # "supporting" — otherwise every Material's own content reads as
-            # core and floods review (issue #26).
-            if goal is None:
-                extracted = [
-                    e.model_copy(update={"goal_relevance": "supporting"})
-                    if e.goal_relevance == "core"
-                    else e
-                    for e in extracted
-                ]
             yield event({"type": "progress", "stage": "saving", "count": len(extracted)})
-            concepts = [await insert_concept(conn, material, e) for e in extracted]
+            concepts = [await insert_concept(conn, material, e, goal) for e in extracted]
             yield event(
                 {"type": "result", "concepts": [c.model_dump(mode="json") for c in concepts]}
             )

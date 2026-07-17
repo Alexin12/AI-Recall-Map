@@ -19,7 +19,7 @@ export default function ConceptMap({ map }: { map: ConceptMapData }) {
     id: n.id,
     position: { x: (i % 3) * 220, y: Math.floor(i / 3) * 100 },
     data: { label: n.name },
-    style: { background: RELEVANCE_COLORS[n.goal_relevance] ?? "#fff" },
+    style: { background: RELEVANCE_COLORS[n.goal_relevance ?? ""] ?? "#fff" },
   }));
   const edges: Edge[] = map.relationships.map((r) => ({
     id: r.id,

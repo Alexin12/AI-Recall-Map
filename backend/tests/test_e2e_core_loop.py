@@ -14,8 +14,10 @@ async def test_full_core_loop(client, make_user, monkeypatch):
     _, auth = await make_user()
 
     # 1. Set a Goal and create a Topic.
-    await client.put("/goal", json={"content": "Learn Spanish for travel"}, headers=auth)
     topic_id = (await client.post("/topics", json={"name": "Spanish"}, headers=auth)).json()["id"]
+    await client.patch(
+        f"/topics/{topic_id}", json={"goal": "Learn Spanish for travel"}, headers=auth
+    )
 
     # 2. Paste a Material.
     material = (

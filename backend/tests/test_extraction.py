@@ -64,8 +64,8 @@ async def test_extract_persists_concepts_and_returns_them(client, make_user, mon
     assert concept["name"] == "Ser vs estar"
     assert concept["explanation"].startswith("Spanish has two verbs")
     assert concept["source_snippet"] == "Ser vs estar: ser is for essence."
-    # No Goal set here, so "core" is capped to "supporting" (issue #26).
-    assert concept["goal_relevance"] == "supporting"
+    # The Topic has no Goal, so relevance is unscored (NULL, ADR-0006).
+    assert concept["goal_relevance"] is None
     assert concept["confidence"] == 0.9
 
     # Persisted: the topic's concept list shows the same row.
@@ -134,11 +134,11 @@ async def test_failed_save_rolls_back_partial_inserts(client, make_user, monkeyp
     real_insert = extraction.insert_concept
     calls = {"n": 0}
 
-    async def insert_then_fail(conn, material, extracted):
+    async def insert_then_fail(conn, material, extracted, goal):
         calls["n"] += 1
         if calls["n"] == 2:
             raise RuntimeError("insert failed")
-        return await real_insert(conn, material, extracted)
+        return await real_insert(conn, material, extracted, goal)
 
     monkeypatch.setattr("app.extraction.insert_concept", insert_then_fail)
     _, auth = await make_user()
@@ -152,27 +152,28 @@ async def test_failed_save_rolls_back_partial_inserts(client, make_user, monkeyp
     assert (await client.get(f"/topics/{topic_id}/concepts", headers=auth)).json() == []
 
 
-async def test_no_goal_caps_relevance_at_supporting(client, make_user, monkeypatch):
-    """With no Goal set, relevance can't be judged, so a 'core' Concept is capped
-    to 'supporting' and left unscheduled (issue #26)."""
+async def test_no_goal_leaves_relevance_null_and_unscheduled(client, make_user, monkeypatch):
+    """A Topic with no Goal can't judge relevance: NULL, nothing scheduled (ADR-0006)."""
     stub_llm(monkeypatch)  # STUB_CONCEPTS has one 'core' concept
-    _, auth = await make_user()  # no PUT /goal
+    _, auth = await make_user()
     topic_id = await make_topic(client, auth)
     material_id = await make_material(client, auth, topic_id)
 
     await client.post(f"/materials/{material_id}/extract", headers=auth)
 
     [concept] = (await client.get(f"/topics/{topic_id}/concepts", headers=auth)).json()
-    assert concept["goal_relevance"] == "supporting"
+    assert concept["goal_relevance"] is None
     assert concept["scheduled"] is False
 
 
-async def test_with_goal_keeps_core_relevance(client, make_user, monkeypatch):
-    """With a Goal set, a 'core' Concept stays 'core' and is scheduled (issue #26)."""
+async def test_with_topic_goal_keeps_core_relevance(client, make_user, monkeypatch):
+    """With a Goal on the Topic, a 'core' Concept stays 'core' and is scheduled."""
     stub_llm(monkeypatch)
     _, auth = await make_user()
-    await client.put("/goal", json={"content": "Pass the DELE B2 exam"}, headers=auth)
     topic_id = await make_topic(client, auth)
+    await client.patch(
+        f"/topics/{topic_id}", json={"goal": "Pass the DELE B2 exam"}, headers=auth
+    )
     material_id = await make_material(client, auth, topic_id)
 
     await client.post(f"/materials/{material_id}/extract", headers=auth)
@@ -182,11 +183,13 @@ async def test_with_goal_keeps_core_relevance(client, make_user, monkeypatch):
     assert concept["scheduled"] is True
 
 
-async def test_goal_is_passed_to_the_llm(client, make_user, monkeypatch):
+async def test_topic_goal_is_passed_to_the_llm(client, make_user, monkeypatch):
     calls = stub_llm(monkeypatch)
     _, auth = await make_user()
-    await client.put("/goal", json={"content": "Pass the DELE B2 exam"}, headers=auth)
     topic_id = await make_topic(client, auth)
+    await client.patch(
+        f"/topics/{topic_id}", json={"goal": "Pass the DELE B2 exam"}, headers=auth
+    )
     material_id = await make_material(client, auth, topic_id, content="Ser is for essence.")
 
     await client.post(f"/materials/{material_id}/extract", headers=auth)

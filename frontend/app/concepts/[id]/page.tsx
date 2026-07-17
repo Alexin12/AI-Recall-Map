@@ -53,7 +53,8 @@ export default function ConceptPage({ params }: { params: Promise<{ id: string }
           <p>
             Mastery: <strong>{concept.mastery}</strong> ·{" "}
             {concept.due ? "Due now" : `Next due ${new Date(concept.next_due_at).toLocaleDateString()}`}{" "}
-            · {concept.goal_relevance}, confidence {Math.round(concept.confidence * 100)}%
+            · {concept.goal_relevance ?? "unscored"}, confidence{" "}
+            {Math.round(concept.confidence * 100)}%
           </p>
           <p>{concept.explanation}</p>
           <blockquote style={{ borderLeft: "3px solid #ccc", paddingLeft: 8 }}>
