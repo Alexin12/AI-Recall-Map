@@ -2,7 +2,11 @@
 
 A running log of concrete mistakes made on this project. Append new entries at the bottom.
 
-## 2026-07-15 — gh write calls fail intermittently inside the sandbox (keychain)
+## 2026-07-15 — `gh issue comment` fails inside the sandbox (keychain), but plain git is fine
+
+**Scope note:** This is *not* a general Git or `gh` failure. Plain `git` (clone, fetch, branch,
+commit, push) reaches GitHub without trouble and should be used normally. The error is specific
+to `gh` writes that hit the GitHub API — commenting on an issue is the case that bit us.
 
 **What happened:** While filing QA issues, `gh issue create` worked but `gh issue comment`
 (and every other write retry) kept failing with `tls: failed to verify certificate:
