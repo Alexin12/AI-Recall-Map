@@ -63,4 +63,12 @@ if printf '%s' "$command" | grep -qE '(^|[;&|]|&&|\|\|)\s*git\s+push\b'; then
   fi
 fi
 
+# --- Reminder: force the lab-notebook GitHub lessons in front of any github action ---
+# Non-blocking: injects context (additionalContext) before git push/pull/fetch or any gh call.
+if printf '%s' "$command" | grep -qE '(^|[;&|]|&&|\|\|)[[:space:]]*(git[[:space:]]+(push|pull|fetch)|gh[[:space:]])'; then
+  reminder='Before this GitHub action, recall lab-notebook.md: (1) git push SUCCEEDS in this sandbox — "unable to get credential storage lock" and "could not lock config file .git/config" are NON-FATAL; the push still lands. Do NOT pipe push output through tail; read the full output and look for the "* [new branch]" / "->" success line. "Everything up-to-date" means it already pushed, not that it failed. You may run git push and gh pr create directly — do not hand the push off to the user over these errors. (2) If a gh WRITE fails with x509 OSStatus -26276, stop after ~2 tries and hand the user a paste-ready command to run in their own terminal.'
+  jq -cn --arg ctx "$reminder" '{hookSpecificOutput:{hookEventName:"PreToolUse",additionalContext:$ctx}}'
+  exit 0
+fi
+
 exit 0
