@@ -11,6 +11,7 @@ from pydantic import BaseModel
 from app.prompts.extraction_v1 import EXTRACTION_SYSTEM_PROMPT_V1
 from app.prompts.grading_v1 import GRADING_SYSTEM_PROMPT_V1
 from app.prompts.relevance_v1 import RELEVANCE_SYSTEM_PROMPT_V1
+from app.prompts.proposal_v1 import PROPOSAL_SYSTEM_PROMPT_V1
 from app.prompts.router_v1 import ROUTER_SYSTEM_PROMPT_V1
 
 
@@ -154,6 +155,40 @@ async def route_concepts(topics: list[dict], concepts: list[dict]) -> list[str |
         by_index.get(i) if by_index.get(i) in known else None
         for i in range(len(concepts))
     ]
+
+
+class ProposedTopic(BaseModel):
+    """One proposed broad Topic and the leftover Concept indexes it covers."""
+
+    name: str
+    indexes: list[int]
+
+
+class ProposalResult(BaseModel):
+    """Structured-output envelope for the Topic-proposal call."""
+
+    proposals: list[ProposedTopic]
+
+
+async def propose_topics(concepts: list[dict]) -> list[dict]:
+    """Cluster orphan Concepts into a few broad proposed Topics (ADR-0005).
+
+    `concepts` items carry name, explanation. Returns [{name, indexes}] —
+    proposals only; nothing is committed until the user confirms.
+    """
+    client = AsyncAnthropic()
+    listing = "\n".join(
+        f"- index: {i}\n  name: {c['name']}\n  explanation: {c['explanation']}"
+        for i, c in enumerate(concepts)
+    )
+    response = await client.messages.parse(
+        model="claude-sonnet-5",
+        max_tokens=16000,
+        system=PROPOSAL_SYSTEM_PROMPT_V1,
+        messages=[{"role": "user", "content": f"Leftover Concepts:\n{listing}"}],
+        output_format=ProposalResult,
+    )
+    return [{"name": p.name, "indexes": p.indexes} for p in response.parsed_output.proposals]
 
 
 async def extract_concepts(material_content: str, goal: str | None) -> list[ExtractedConcept]:

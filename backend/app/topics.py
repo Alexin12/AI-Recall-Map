@@ -13,9 +13,11 @@ router = APIRouter()
 
 
 class TopicCreate(BaseModel):
-    """Request body for creating a Topic."""
+    """Request body for creating a Topic, e.g. confirming a proposed one; the
+    optional Goal set on the confirmation step drives Phase-2 scoring (story 10)."""
 
     name: str
+    goal: str | None = None
 
 
 class TopicEdit(BaseModel):
@@ -51,10 +53,10 @@ async def create_topic(body: TopicCreate, conn: UserConn) -> Topic:
     """Insert a Topic owned by the current user (user_id defaults to auth.uid())."""
     result = await conn.execute(
         text(
-            "INSERT INTO topics (name) VALUES (:name) "
+            "INSERT INTO topics (name, goal) VALUES (:name, :goal) "
             "RETURNING id, name, goal, created_at"
         ),
-        {"name": body.name},
+        {"name": body.name, "goal": body.goal},
     )
     return topic_from_row(result.one())
 

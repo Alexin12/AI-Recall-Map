@@ -16,6 +16,7 @@ from sqlalchemy import text
 
 from app.deps import UserConn
 from app.llm import extract_concepts as llm_extract_concepts
+from app.llm import propose_topics as llm_propose_topics
 from app.llm import route_concepts as llm_route_concepts
 from app.llm import score_relevance as llm_score_relevance
 
@@ -204,9 +205,32 @@ async def extract_material(material_id: str, conn: UserConn) -> StreamingRespons
                     for e, route in zip(extracted, routes)
                 ]
                 await score_routed_concepts(conn, topics, concepts)
-            else:
-                yield event({"type": "progress", "stage": "saving", "count": len(extracted)})
-                concepts = [await insert_concept(conn, material, e, goal) for e in extracted]
+                # Orphans are clustered into a few broad proposed Topics —
+                # proposals only; the user confirms before anything is created.
+                orphans = [c for c in concepts if c.topic_id is None]
+                proposals = []
+                if orphans:
+                    yield event({"type": "progress", "stage": "proposing"})
+                    grouped = await llm_propose_topics(
+                        [{"name": c.name, "explanation": c.explanation} for c in orphans]
+                    )
+                    proposals = [
+                        {
+                            "name": g["name"],
+                            "concept_ids": [orphans[i].id for i in g["indexes"]],
+                        }
+                        for g in grouped
+                    ]
+                yield event(
+                    {
+                        "type": "result",
+                        "concepts": [c.model_dump(mode="json") for c in concepts],
+                        "proposals": proposals,
+                    }
+                )
+                return
+            yield event({"type": "progress", "stage": "saving", "count": len(extracted)})
+            concepts = [await insert_concept(conn, material, e, goal) for e in extracted]
             yield event(
                 {"type": "result", "concepts": [c.model_dump(mode="json") for c in concepts]}
             )
