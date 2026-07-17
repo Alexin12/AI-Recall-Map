@@ -1,5 +1,7 @@
 """Confirmation endpoints: edit, delete, toggle-schedule, and confirm Concepts."""
 
+from typing import Literal
+
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy import text
@@ -21,6 +23,7 @@ class ConceptEdit(BaseModel):
     name: str | None = None
     explanation: str | None = None
     scheduled: bool | None = None
+    goal_relevance: Literal["irrelevant", "supporting", "core"] | None = None
 
 
 def concept_from_row(row, questions: list[Question] | None = None) -> Concept:
@@ -42,13 +45,21 @@ def concept_from_row(row, questions: list[Question] | None = None) -> Concept:
 
 @router.patch("/concepts/{concept_id}", response_model=Concept)
 async def edit_concept(concept_id: str, body: ConceptEdit, conn: UserConn) -> Concept:
-    """Update a Concept's name, explanation, or scheduled flag (RLS hides others')."""
+    """Update a Concept's name, explanation, scheduled flag, or relevance override.
+
+    A relevance override is the user's final say (story 14): it also recomputes
+    scheduled (core/supporting reviewed, irrelevant browsable) unless the body
+    sets scheduled explicitly.
+    """
+    if body.goal_relevance is not None and body.scheduled is None:
+        body.scheduled = body.goal_relevance in ("core", "supporting")
     result = await conn.execute(
         text(
             "UPDATE concepts SET "
             "name = COALESCE(:name, name), "
             "explanation = COALESCE(:explanation, explanation), "
-            "scheduled = COALESCE(:scheduled, scheduled) "
+            "scheduled = COALESCE(:scheduled, scheduled), "
+            "goal_relevance = COALESCE(:goal_relevance, goal_relevance) "
             f"WHERE id = :id RETURNING {CONCEPT_COLUMNS}"
         ),
         {
@@ -56,6 +67,7 @@ async def edit_concept(concept_id: str, body: ConceptEdit, conn: UserConn) -> Co
             "name": body.name,
             "explanation": body.explanation,
             "scheduled": body.scheduled,
+            "goal_relevance": body.goal_relevance,
         },
     )
     row = result.first()

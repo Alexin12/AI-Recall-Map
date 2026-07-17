@@ -14,6 +14,7 @@ async def extract_two(client, auth, monkeypatch) -> str:
         concepts=[concept_of("core", "First idea"), concept_of("supporting", "Second idea")],
     )
     topic_id = await make_topic(client, auth)
+    await client.patch(f"/topics/{topic_id}", json={"goal": "Learn the idea"}, headers=auth)
     material_id = await make_material(client, auth, topic_id)
     await client.post(f"/materials/{material_id}/extract", headers=auth)
     return topic_id

@@ -6,18 +6,12 @@ export type Ping = {
   created_at: string;
 };
 
-// Hand-synced with the backend Pydantic model app/goals.py -> Goal.
-export type Goal = {
-  id: string;
-  content: string;
-  created_at: string;
-  updated_at: string;
-};
-
 // Hand-synced with the backend Pydantic model app/topics.py -> Topic.
+// goal is optional per Topic (ADR-0006); null = browse only, never due.
 export type Topic = {
   id: string;
   name: string;
+  goal: string | null;
   created_at: string;
 };
 
@@ -37,7 +31,7 @@ export type Concept = {
   name: string;
   explanation: string;
   source_snippet: string;
-  goal_relevance: "irrelevant" | "supporting" | "core";
+  goal_relevance: "irrelevant" | "supporting" | "core" | null;
   confidence: number;
   scheduled: boolean;
   confirmed: boolean;
@@ -78,7 +72,7 @@ export type ConceptDetail = Concept & {
 export type MapNode = {
   id: string;
   name: string;
-  goal_relevance: "irrelevant" | "supporting" | "core";
+  goal_relevance: "irrelevant" | "supporting" | "core" | null;
   scheduled: boolean;
   confirmed: boolean;
 };

@@ -14,7 +14,7 @@ class MapNode(BaseModel):
 
     id: str
     name: str
-    goal_relevance: str
+    goal_relevance: str | None
     scheduled: bool
     confirmed: bool
 

@@ -10,6 +10,7 @@ from pydantic import BaseModel
 
 from app.prompts.extraction_v1 import EXTRACTION_SYSTEM_PROMPT_V1
 from app.prompts.grading_v1 import GRADING_SYSTEM_PROMPT_V1
+from app.prompts.relevance_v1 import RELEVANCE_SYSTEM_PROMPT_V1
 
 
 class ExtractedConcept(BaseModel):
@@ -62,6 +63,44 @@ async def grade_answer(
         output_format=GradeResult,
     )
     return response.parsed_output
+
+
+class ScoredConcept(BaseModel):
+    """One Concept's Phase-2 relevance verdict, keyed back by its id."""
+
+    id: str
+    goal_relevance: Literal["irrelevant", "supporting", "core"]
+
+
+class RelevanceResult(BaseModel):
+    """Structured-output envelope for the Phase-2 relevance call."""
+
+    scores: list[ScoredConcept]
+
+
+async def score_relevance(goal: str, concepts: list[dict]) -> dict[str, str]:
+    """Score each Concept's relevance to the Topic's Goal (ADR-0006 Phase 2).
+
+    `concepts` items carry id, name, explanation; returns {concept_id: relevance}.
+    """
+    client = AsyncAnthropic()
+    listing = "\n".join(
+        f"- id: {c['id']}\n  name: {c['name']}\n  explanation: {c['explanation']}"
+        for c in concepts
+    )
+    response = await client.messages.parse(
+        model="claude-sonnet-5",
+        max_tokens=16000,
+        system=RELEVANCE_SYSTEM_PROMPT_V1,
+        messages=[
+            {
+                "role": "user",
+                "content": f"The Topic's Goal: {goal}\n\nConcepts:\n{listing}",
+            }
+        ],
+        output_format=RelevanceResult,
+    )
+    return {s.id: s.goal_relevance for s in response.parsed_output.scores}
 
 
 async def extract_concepts(material_content: str, goal: str | None) -> list[ExtractedConcept]:

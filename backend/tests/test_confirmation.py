@@ -27,9 +27,9 @@ async def extract_three(client, auth, monkeypatch) -> str:
             concept_of("irrelevant", "Irrelevant idea"),
         ],
     )
-    # A Goal must be set for "core" relevance to survive (issue #26).
-    await client.put("/goal", json={"content": "Learn the idea"}, headers=auth)
+    # The Topic needs a Goal for extraction-time relevance to be kept (ADR-0006).
     topic_id = await make_topic(client, auth)
+    await client.patch(f"/topics/{topic_id}", json={"goal": "Learn the idea"}, headers=auth)
     material_id = await make_material(client, auth, topic_id)
     await client.post(f"/materials/{material_id}/extract", headers=auth)
     return topic_id
@@ -41,7 +41,7 @@ async def test_scheduling_defaults_by_relevance(client, make_user, monkeypatch):
 
     concepts = (await client.get(f"/topics/{topic_id}/concepts", headers=auth)).json()
     defaults = {c["goal_relevance"]: c["scheduled"] for c in concepts}
-    assert defaults == {"core": True, "supporting": False, "irrelevant": False}
+    assert defaults == {"core": True, "supporting": True, "irrelevant": False}
     assert all(c["confirmed"] is False for c in concepts)
 
 
@@ -70,14 +70,14 @@ async def test_toggle_scheduling(client, make_user, monkeypatch):
     _, auth = await make_user()
     topic_id = await extract_three(client, auth, monkeypatch)
     concepts = (await client.get(f"/topics/{topic_id}/concepts", headers=auth)).json()
-    [supporting] = [c for c in concepts if c["goal_relevance"] == "supporting"]
+    [irrelevant] = [c for c in concepts if c["goal_relevance"] == "irrelevant"]
 
     toggled = await client.patch(
-        f"/concepts/{supporting['id']}", json={"scheduled": True}, headers=auth
+        f"/concepts/{irrelevant['id']}", json={"scheduled": True}, headers=auth
     )
     assert toggled.status_code == 200
     assert toggled.json()["scheduled"] is True
-    assert toggled.json()["name"] == "Supporting idea"  # name untouched
+    assert toggled.json()["name"] == "Irrelevant idea"  # name untouched
 
 
 async def test_delete_concept_removes_it_and_its_questions(client, make_user, monkeypatch):
@@ -99,8 +99,8 @@ async def test_confirm_marks_remaining_concepts_confirmed(client, make_user, mon
         monkeypatch,
         concepts=[concept_of("core", "Core idea"), concept_of("supporting", "Supporting idea")],
     )
-    await client.put("/goal", json={"content": "Learn the idea"}, headers=auth)
     topic_id = await make_topic(client, auth)
+    await client.patch(f"/topics/{topic_id}", json={"goal": "Learn the idea"}, headers=auth)
     material_id = await make_material(client, auth, topic_id)
     await client.post(f"/materials/{material_id}/extract", headers=auth)
 
@@ -109,10 +109,10 @@ async def test_confirm_marks_remaining_concepts_confirmed(client, make_user, mon
 
     concepts = (await client.get(f"/topics/{topic_id}/concepts", headers=auth)).json()
     assert all(c["confirmed"] is True for c in concepts)
-    # Due-eligible = confirmed AND scheduled: only the core one here.
+    # Due-eligible = confirmed AND scheduled: core and supporting both review.
     assert {c["name"]: c["scheduled"] for c in concepts} == {
         "Core idea": True,
-        "Supporting idea": False,
+        "Supporting idea": True,
     }
 
 
