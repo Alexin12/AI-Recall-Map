@@ -1,10 +1,9 @@
 "use client";
 
-import { useRouter } from "next/navigation";
-import { ReactFlow, Background, type Node, type Edge } from "@xyflow/react";
-import "@xyflow/react/dist/style.css";
+import { useState } from "react";
+import Link from "next/link";
 
-import type { ConceptMap as ConceptMapData } from "@/types";
+import type { ConceptMap as ConceptMapData, TreeNode } from "@/types";
 
 const RELEVANCE_COLORS: Record<string, string> = {
   core: "#c8e6c9",
@@ -12,35 +11,49 @@ const RELEVANCE_COLORS: Record<string, string> = {
   irrelevant: "#eeeeee",
 };
 
-/** Read-only Concept Map: auto grid layout, no drag/edit; click opens the detail page. */
-export default function ConceptMap({ map }: { map: ConceptMapData }) {
-  const router = useRouter();
-  const nodes: Node[] = map.nodes.map((n, i) => ({
-    id: n.id,
-    position: { x: (i % 3) * 220, y: Math.floor(i / 3) * 100 },
-    data: { label: n.name },
-    style: { background: RELEVANCE_COLORS[n.goal_relevance ?? ""] ?? "#fff" },
-  }));
-  const edges: Edge[] = map.relationships.map((r) => ({
-    id: r.id,
-    source: r.from_concept_id,
-    target: r.to_concept_id,
-    label: r.kind,
-  }));
-
+/** One expandable node: click the arrow to expand, the label to open the detail page. */
+function TreeBranch({ node }: { node: TreeNode }) {
+  const [open, setOpen] = useState(true);
   return (
-    <div style={{ height: 320, border: "1px solid #ccc" }}>
-      <ReactFlow
-        nodes={nodes}
-        edges={edges}
-        fitView
-        nodesDraggable={false}
-        nodesConnectable={false}
-        edgesFocusable={false}
-        onNodeClick={(_, node) => router.push(`/concepts/${node.id}`)}
+    <li style={{ listStyle: "none", margin: "4px 0" }}>
+      <span
+        onClick={() => setOpen(!open)}
+        style={{
+          cursor: node.children.length ? "pointer" : "default",
+          display: "inline-block",
+          width: 16,
+        }}
       >
-        <Background />
-      </ReactFlow>
-    </div>
+        {node.children.length > 0 ? (open ? "▾" : "▸") : "·"}
+      </span>
+      <Link
+        href={`/concepts/${node.id}`}
+        style={{
+          background: RELEVANCE_COLORS[node.goal_relevance ?? ""] ?? "#fff",
+          padding: "2px 6px",
+          borderRadius: 4,
+        }}
+      >
+        {node.display_label}
+      </Link>
+      {open && node.children.length > 0 && (
+        <ul style={{ paddingLeft: 20, margin: 0 }}>
+          {node.children.map((c) => (
+            <TreeBranch key={c.id} node={c} />
+          ))}
+        </ul>
+      )}
+    </li>
+  );
+}
+
+/** The Topic's Concept Map as an expandable hierarchy tree (ADR-0007). */
+export default function ConceptMap({ map }: { map: ConceptMapData }) {
+  return (
+    <ul style={{ padding: 0, border: "1px solid #ccc", borderRadius: 4, margin: 0, paddingBlock: 8, paddingInline: 8 }}>
+      {map.tree.map((n) => (
+        <TreeBranch key={n.id} node={n} />
+      ))}
+    </ul>
   );
 }

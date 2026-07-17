@@ -25,6 +25,10 @@ class ExtractedConcept(BaseModel):
     confidence: float
     flashcard_prompt: str
     written_prompt: str
+    # Hierarchy (ADR-0007): the name of this Concept's primary parent within
+    # the same extraction (None = root), plus a display-only second parent.
+    parent_name: str | None = None
+    second_parent_name: str | None = None
 
 
 class ExtractionResult(BaseModel):

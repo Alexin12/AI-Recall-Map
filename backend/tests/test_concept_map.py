@@ -1,69 +1,106 @@
-"""Concept Map: nodes and relationship rows for a Topic, ready for React Flow."""
+"""Concept Map as a hierarchy tree (ADR-0007): parent pointers, not edge rows.
 
-from sqlalchemy import text
+Extraction emits a primary parent per Concept (plus an optional display-only
+second parent); the map endpoint returns the Topic's Concepts as a tree.
+"""
 
-from app.db import engine
+from app.llm import ExtractedConcept
 
-from tests.test_confirmation import concept_of
 from tests.test_extraction import make_material, make_topic, stub_llm
 
 
-async def extract_two(client, auth, monkeypatch) -> str:
-    stub_llm(
-        monkeypatch,
-        concepts=[concept_of("core", "First idea"), concept_of("supporting", "Second idea")],
+def tree_concept(name: str, parent: str | None = None, second: str | None = None):
+    return ExtractedConcept(
+        name=name,
+        explanation=f"Explanation of {name}.",
+        source_snippet=f"Snippet for {name}.",
+        goal_relevance="supporting",
+        confidence=0.9,
+        flashcard_prompt=f"Flashcard for {name}?",
+        written_prompt=f"Explain {name}.",
+        parent_name=parent,
+        second_parent_name=second,
     )
+
+
+async def extract_tree(client, auth, monkeypatch, concepts) -> str:
+    stub_llm(monkeypatch, concepts=concepts)
     topic_id = await make_topic(client, auth)
-    await client.patch(f"/topics/{topic_id}", json={"goal": "Learn the idea"}, headers=auth)
     material_id = await make_material(client, auth, topic_id)
     await client.post(f"/materials/{material_id}/extract", headers=auth)
     return topic_id
 
 
-async def test_map_returns_concept_nodes_and_relationship_rows(
-    client, make_user, monkeypatch
-):
+async def test_map_returns_tree_from_parent_pointers(client, make_user, monkeypatch):
     _, auth = await make_user()
-    topic_id = await extract_two(client, auth, monkeypatch)
+    topic_id = await extract_tree(
+        client,
+        auth,
+        monkeypatch,
+        [
+            tree_concept("RAG"),
+            tree_concept("Retrieval", parent="RAG"),
+            tree_concept("Vector databases", parent="Retrieval"),
+            tree_concept("Generation", parent="RAG"),
+        ],
+    )
 
     resp = await client.get(f"/topics/{topic_id}/map", headers=auth)
     assert resp.status_code == 200
-    body = resp.json()
-    assert {n["name"] for n in body["nodes"]} == {"First idea", "Second idea"}
-    for node in body["nodes"]:
-        assert node["id"]
-        assert node["goal_relevance"] in ("core", "supporting")
-    assert body["relationships"] == []
+    [root] = resp.json()["tree"]
+    assert root["name"] == "RAG"
+    children = {c["name"]: c for c in root["children"]}
+    assert set(children) == {"Retrieval", "Generation"}
+    [grandchild] = children["Retrieval"]["children"]
+    assert grandchild["name"] == "Vector databases"
+    assert grandchild["children"] == []
 
 
-async def test_map_includes_relationship_rows(client, make_user, monkeypatch):
+async def test_second_parent_shows_as_slash_label(client, make_user, monkeypatch):
+    """A two-parent Concept hangs off its primary parent and carries a
+    display-only slash label (ADR-0007); the Topic has no Goal yet stays browsable."""
     _, auth = await make_user()
-    topic_id = await extract_two(client, auth, monkeypatch)
-    nodes = (await client.get(f"/topics/{topic_id}/map", headers=auth)).json()["nodes"]
-    by_name = {n["name"]: n["id"] for n in nodes}
+    topic_id = await extract_tree(
+        client,
+        auth,
+        monkeypatch,
+        [
+            tree_concept("Retrieval"),
+            tree_concept("Semantic search", parent="Retrieval", second="Embeddings"),
+        ],
+    )
 
-    # No API creates relationships in M1; seed one plain Postgres row (ADR-0002).
-    async with engine.begin() as conn:
-        await conn.execute(
-            text(
-                "INSERT INTO concept_relationships "
-                "(user_id, topic_id, from_concept_id, to_concept_id, kind) "
-                "SELECT user_id, topic_id, :from_id, :to_id, 'related' "
-                "FROM concepts WHERE id = :from_id"
-            ),
-            {"from_id": by_name["First idea"], "to_id": by_name["Second idea"]},
-        )
-
-    body = (await client.get(f"/topics/{topic_id}/map", headers=auth)).json()
-    [rel] = body["relationships"]
-    assert rel["from_concept_id"] == by_name["First idea"]
-    assert rel["to_concept_id"] == by_name["Second idea"]
-    assert rel["kind"] == "related"
+    [root] = (await client.get(f"/topics/{topic_id}/map", headers=auth)).json()["tree"]
+    assert root["display_label"] == "Retrieval"
+    [child] = root["children"]
+    assert child["display_label"] == "Semantic search / Embeddings"
+    # Structure and review are independent: no Goal, still browsable, unscored.
+    assert child["goal_relevance"] is None
 
 
-async def test_rls_hides_other_users_map(client, make_user, monkeypatch):
-    _, auth_a = await make_user()
-    _, auth_b = await make_user()
-    topic_id = await extract_two(client, auth_a, monkeypatch)
+async def test_deleting_a_concept_reparents_children_to_roots(
+    client, make_user, monkeypatch
+):
+    """Deleting a Concept removes it (Questions cascade); its children survive
+    as new roots and the tree re-renders without it (story 19)."""
+    _, auth = await make_user()
+    topic_id = await extract_tree(
+        client,
+        auth,
+        monkeypatch,
+        [
+            tree_concept("RAG"),
+            tree_concept("Retrieval", parent="RAG"),
+            tree_concept("Vector databases", parent="Retrieval"),
+        ],
+    )
+    [root] = (await client.get(f"/topics/{topic_id}/map", headers=auth)).json()["tree"]
+    [retrieval] = root["children"]
 
-    assert (await client.get(f"/topics/{topic_id}/map", headers=auth_b)).status_code == 404
+    deleted = await client.delete(f"/concepts/{retrieval['id']}", headers=auth)
+    assert deleted.status_code == 204
+
+    tree = (await client.get(f"/topics/{topic_id}/map", headers=auth)).json()["tree"]
+    assert {n["name"] for n in tree} == {"RAG", "Vector databases"}
+    assert all(n["children"] == [] for n in tree)
+    assert (await client.get(f"/concepts/{retrieval['id']}", headers=auth)).status_code == 404
