@@ -11,6 +11,7 @@ from pydantic import BaseModel
 from app.prompts.extraction_v1 import EXTRACTION_SYSTEM_PROMPT_V1
 from app.prompts.grading_v1 import GRADING_SYSTEM_PROMPT_V1
 from app.prompts.relevance_v1 import RELEVANCE_SYSTEM_PROMPT_V1
+from app.prompts.router_v1 import ROUTER_SYSTEM_PROMPT_V1
 
 
 class ExtractedConcept(BaseModel):
@@ -101,6 +102,58 @@ async def score_relevance(goal: str, concepts: list[dict]) -> dict[str, str]:
         output_format=RelevanceResult,
     )
     return {s.id: s.goal_relevance for s in response.parsed_output.scores}
+
+
+class RoutedConcept(BaseModel):
+    """The router's decision for one Concept, keyed back by its list index."""
+
+    index: int
+    topic_id: str | None
+
+
+class RoutingResult(BaseModel):
+    """Structured-output envelope for the router call."""
+
+    decisions: list[RoutedConcept]
+
+
+async def route_concepts(topics: list[dict], concepts: list[dict]) -> list[str | None]:
+    """Attribute each Concept to an existing Topic or None = inbox (ADR-0005).
+
+    `topics` items carry id, name, goal; `concepts` items carry name,
+    explanation. Returns one topic_id-or-None per Concept, aligned by position.
+    The router never mints Topics: unknown topic ids collapse to None.
+    """
+    client = AsyncAnthropic()
+    topic_listing = "\n".join(
+        f"- id: {t['id']}\n  name: {t['name']}\n  goal: {t.get('goal') or 'none'}"
+        for t in topics
+    )
+    concept_listing = "\n".join(
+        f"- index: {i}\n  name: {c['name']}\n  explanation: {c['explanation']}"
+        for i, c in enumerate(concepts)
+    )
+    response = await client.messages.parse(
+        model="claude-sonnet-5",
+        max_tokens=16000,
+        system=ROUTER_SYSTEM_PROMPT_V1,
+        messages=[
+            {
+                "role": "user",
+                "content": (
+                    f"Existing Topics:\n{topic_listing or '(none)'}\n\n"
+                    f"Concepts:\n{concept_listing}"
+                ),
+            }
+        ],
+        output_format=RoutingResult,
+    )
+    known = {t["id"] for t in topics}
+    by_index = {d.index: d.topic_id for d in response.parsed_output.decisions}
+    return [
+        by_index.get(i) if by_index.get(i) in known else None
+        for i in range(len(concepts))
+    ]
 
 
 async def extract_concepts(material_content: str, goal: str | None) -> list[ExtractedConcept]:

@@ -23,6 +23,19 @@ class ConceptDetail(Concept):
     reviews: list[Review] = []
 
 
+# Registered before /concepts/{concept_id} so "unclassified" isn't read as an id.
+@router.get("/concepts/unclassified", response_model=list[Concept])
+async def list_unclassified(conn: UserConn) -> list[Concept]:
+    """The inbox: the user's Concepts with no Topic yet (ADR-0005)."""
+    rows = await conn.execute(
+        text(
+            f"SELECT {CONCEPT_COLUMNS} FROM concepts "
+            "WHERE topic_id IS NULL ORDER BY created_at"
+        )
+    )
+    return [concept_from_row(r) for r in rows]
+
+
 @router.get("/concepts/{concept_id}", response_model=ConceptDetail)
 async def concept_detail(concept_id: str, conn: UserConn) -> ConceptDetail:
     """Everything about one Concept (404 if it isn't the user's)."""
