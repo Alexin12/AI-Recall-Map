@@ -16,6 +16,8 @@ from sqlalchemy import text
 
 from app.deps import UserConn
 from app.llm import extract_concepts as llm_extract_concepts
+from app.llm import route_concepts as llm_route_concepts
+from app.llm import score_relevance as llm_score_relevance
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -34,7 +36,7 @@ class Concept(BaseModel):
     """One persisted Concept with its Questions."""
 
     id: str
-    topic_id: str
+    topic_id: str | None
     material_id: str
     name: str
     explanation: str
@@ -61,6 +63,8 @@ async def require_own_material(material_id: str, conn):
 
 async def fetch_topic_goal(conn, topic_id) -> str | None:
     """Return the Topic's Goal (ADR-0006: Goal lives on the Topic), or None."""
+    if topic_id is None:
+        return None
     result = await conn.execute(
         text("SELECT goal FROM topics WHERE id = :id"), {"id": str(topic_id)}
     )
@@ -68,8 +72,16 @@ async def fetch_topic_goal(conn, topic_id) -> str | None:
     return row.goal if row else None
 
 
-async def insert_concept(conn, material, extracted, goal: str | None) -> Concept:
-    """Persist one extracted Concept plus its flashcard and written Questions."""
+async def insert_concept(
+    conn, material, extracted, goal: str | None, topic_id: str | None = None
+) -> Concept:
+    """Persist one extracted Concept plus its flashcard and written Questions.
+
+    topic_id overrides the Material's own Topic for the routed flow (ADR-0005);
+    None there means unclassified (the inbox).
+    """
+    if topic_id is None and material.topic_id is not None:
+        topic_id = str(material.topic_id)
     row = (
         await conn.execute(
             text(
@@ -81,7 +93,7 @@ async def insert_concept(conn, material, extracted, goal: str | None) -> Concept
                 "source_snippet, goal_relevance, confidence, scheduled, confirmed, created_at"
             ),
             {
-                "topic_id": str(material.topic_id),
+                "topic_id": topic_id,
                 "material_id": str(material.id),
                 "name": extracted.name,
                 "explanation": extracted.explanation,
@@ -114,7 +126,7 @@ async def insert_concept(conn, material, extracted, goal: str | None) -> Concept
         )
     return Concept(
         id=str(row.id),
-        topic_id=str(row.topic_id),
+        topic_id=str(row.topic_id) if row.topic_id else None,
         material_id=str(row.material_id),
         name=row.name,
         explanation=row.explanation,
@@ -126,6 +138,34 @@ async def insert_concept(conn, material, extracted, goal: str | None) -> Concept
         created_at=row.created_at,
         questions=questions,
     )
+
+
+async def score_routed_concepts(conn, topics: list[dict], concepts: list[Concept]) -> None:
+    """Phase 2 for the routed flow (ADR-0006): score the just-routed Concepts of
+    each Goal-carrying Topic and schedule core/supporting; mirror onto the models."""
+    goals = {t["id"]: t["goal"] for t in topics if t["goal"]}
+    by_topic: dict[str, list[Concept]] = {}
+    for c in concepts:
+        if c.topic_id in goals:
+            by_topic.setdefault(c.topic_id, []).append(c)
+    for topic_id, topic_concepts in by_topic.items():
+        scores = await llm_score_relevance(
+            goals[topic_id],
+            [{"id": c.id, "name": c.name, "explanation": c.explanation} for c in topic_concepts],
+        )
+        for c in topic_concepts:
+            relevance = scores.get(c.id)
+            if relevance is None:
+                continue
+            c.goal_relevance = relevance
+            c.scheduled = relevance in ("core", "supporting")
+            await conn.execute(
+                text(
+                    "UPDATE concepts SET goal_relevance = :relevance, "
+                    "scheduled = :scheduled WHERE id = :id"
+                ),
+                {"id": c.id, "relevance": relevance, "scheduled": c.scheduled},
+            )
 
 
 @router.post("/materials/{material_id}/extract")
@@ -144,8 +184,29 @@ async def extract_material(material_id: str, conn: UserConn) -> StreamingRespons
         yield event({"type": "progress", "stage": "extracting"})
         try:
             extracted = await llm_extract_concepts(material.content, goal)
-            yield event({"type": "progress", "stage": "saving", "count": len(extracted)})
-            concepts = [await insert_concept(conn, material, e, goal) for e in extracted]
+            if material.topic_id is None:
+                # Routed flow (ADR-0005): attribute each Concept to an existing
+                # Topic; what fits nowhere stays unclassified (the inbox).
+                yield event({"type": "progress", "stage": "routing"})
+                topic_rows = await conn.execute(
+                    text("SELECT id, name, goal FROM topics ORDER BY created_at")
+                )
+                topics = [
+                    {"id": str(t.id), "name": t.name, "goal": t.goal} for t in topic_rows
+                ]
+                routes = await llm_route_concepts(
+                    topics,
+                    [{"name": e.name, "explanation": e.explanation} for e in extracted],
+                )
+                yield event({"type": "progress", "stage": "saving", "count": len(extracted)})
+                concepts = [
+                    await insert_concept(conn, material, e, goal=None, topic_id=route)
+                    for e, route in zip(extracted, routes)
+                ]
+                await score_routed_concepts(conn, topics, concepts)
+            else:
+                yield event({"type": "progress", "stage": "saving", "count": len(extracted)})
+                concepts = [await insert_concept(conn, material, e, goal) for e in extracted]
             yield event(
                 {"type": "result", "concepts": [c.model_dump(mode="json") for c in concepts]}
             )

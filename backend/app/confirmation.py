@@ -8,6 +8,7 @@ from sqlalchemy import text
 
 from app.deps import UserConn
 from app.extraction import Concept, Question
+from app.llm import score_relevance as llm_score_relevance
 
 router = APIRouter()
 
@@ -24,12 +25,13 @@ class ConceptEdit(BaseModel):
     explanation: str | None = None
     scheduled: bool | None = None
     goal_relevance: Literal["irrelevant", "supporting", "core"] | None = None
+    topic_id: str | None = None
 
 
 def concept_from_row(row, questions: list[Question] | None = None) -> Concept:
     return Concept(
         id=str(row.id),
-        topic_id=str(row.topic_id),
+        topic_id=str(row.topic_id) if row.topic_id else None,
         material_id=str(row.material_id),
         name=row.name,
         explanation=row.explanation,
@@ -53,13 +55,20 @@ async def edit_concept(concept_id: str, body: ConceptEdit, conn: UserConn) -> Co
     """
     if body.goal_relevance is not None and body.scheduled is None:
         body.scheduled = body.goal_relevance in ("core", "supporting")
+    if body.topic_id is not None:
+        found = await conn.execute(
+            text("SELECT id FROM topics WHERE id = :id"), {"id": body.topic_id}
+        )
+        if found.first() is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Topic not found")
     result = await conn.execute(
         text(
             "UPDATE concepts SET "
             "name = COALESCE(:name, name), "
             "explanation = COALESCE(:explanation, explanation), "
             "scheduled = COALESCE(:scheduled, scheduled), "
-            "goal_relevance = COALESCE(:goal_relevance, goal_relevance) "
+            "goal_relevance = COALESCE(:goal_relevance, goal_relevance), "
+            "topic_id = COALESCE(:topic_id, topic_id) "
             f"WHERE id = :id RETURNING {CONCEPT_COLUMNS}"
         ),
         {
@@ -68,12 +77,47 @@ async def edit_concept(concept_id: str, body: ConceptEdit, conn: UserConn) -> Co
             "explanation": body.explanation,
             "scheduled": body.scheduled,
             "goal_relevance": body.goal_relevance,
+            "topic_id": body.topic_id,
         },
     )
     row = result.first()
     if row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Concept not found")
-    return concept_from_row(row)
+    concept = concept_from_row(row)
+    if body.topic_id is not None:
+        concept = await rescore_moved_concept(conn, concept)
+    return concept
+
+
+async def rescore_moved_concept(conn, concept: Concept) -> Concept:
+    """A moved Concept is re-judged in its new Topic (ADR-0006): scored against
+    that Topic's Goal, or unscored and unscheduled when the Topic has none."""
+    goal_row = (
+        await conn.execute(
+            text("SELECT goal FROM topics WHERE id = :id"), {"id": concept.topic_id}
+        )
+    ).first()
+    goal = goal_row.goal if goal_row else None
+    if goal:
+        scores = await llm_score_relevance(
+            goal, [{"id": concept.id, "name": concept.name, "explanation": concept.explanation}]
+        )
+        relevance = scores.get(concept.id)
+        if relevance is None:
+            return concept
+        concept.goal_relevance = relevance
+        concept.scheduled = relevance in ("core", "supporting")
+    else:
+        concept.goal_relevance = None
+        concept.scheduled = False
+    await conn.execute(
+        text(
+            "UPDATE concepts SET goal_relevance = :relevance, scheduled = :scheduled "
+            "WHERE id = :id"
+        ),
+        {"id": concept.id, "relevance": concept.goal_relevance, "scheduled": concept.scheduled},
+    )
+    return concept
 
 
 @router.delete("/concepts/{concept_id}", status_code=status.HTTP_204_NO_CONTENT)
