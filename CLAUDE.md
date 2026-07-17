@@ -81,10 +81,14 @@ Swap in the test file(s) that actually cover the PR, or run the whole suite with
 
 The point of the table is that when a bullet misbehaves end-to-end, the user can read column 2 to understand what should happen, then jump straight to the file and function in columns 3–4 to inspect (backend route vs. scheduler vs. frontend component) instead of guessing.
 
-### gh failures with `x509: OSStatus -26276`: stop retrying, hand the command to the user
+### `gh` commenting on an issue fails with `x509: OSStatus -26276`: stop retrying, hand the command to the user
 
-The sandbox denies reading `~/Library`, where macOS keeps the Keychain (gh's token) and the
-certificate trust store, so `gh` calls fail intermittently with `tls: failed to verify
-certificate: x509: OSStatus -26276`. REST vs GraphQL, retry loops, and `curl` + `gh auth token`
-all dead-end (see `lab-notebook.md`, 2026-07-15). After ~2 failures with this error, do not keep
-trying — print a paste-ready command for the user to run in their own terminal instead.
+Plain `git` operations work fine — clone, fetch, branch, commit, push all reach GitHub without
+trouble, so use them normally. The x509 error is **not** a general Git or `gh` failure; it shows
+up specifically when using `gh` to comment on an issue (`gh issue comment`, and similar
+API-backed writes). The cause is that the sandbox denies reading `~/Library`, where macOS keeps
+the Keychain (gh's token) and the certificate trust store, so those `gh` calls fail with `tls:
+failed to verify certificate: x509: OSStatus -26276`. REST vs GraphQL, retry loops, and `curl` +
+`gh auth token` all dead-end (see `lab-notebook.md`, 2026-07-15). After ~2 failures with this
+error, do not keep trying — print a paste-ready command for the user to run in their own terminal
+instead.
