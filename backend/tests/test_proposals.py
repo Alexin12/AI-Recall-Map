@@ -3,17 +3,31 @@ into a few high-level proposed Topics that the user confirms — the model never
 auto-commits a Topic. The extraction / router / proposal LLM calls are stubbed.
 """
 
+from app.prompts.proposal_v1 import PROPOSAL_SYSTEM_PROMPT_V1
+
 from tests.test_confirmation import concept_of
 from tests.test_extraction import make_topic, stub_llm
 from tests.test_routing import paste_and_extract, stub_router
+
+
+def test_proposal_prompt_teaches_broad_sibling_domain_grouping():
+    """Prompt coverage (issue #60): the sibling-domain example and the rule
+    that broad grouping must not merge unrelated subjects are both spelled out."""
+    prompt = PROPOSAL_SYSTEM_PROMPT_V1
+    assert "Korean" in prompt and "Chinese" in prompt
+    assert "Language Learning" in prompt
+    assert "subfield" in prompt.lower()
+    assert "unrelated" in prompt.lower()
 
 
 def stub_proposals(monkeypatch, groups: dict[str, list[str]]):
     """Stub the proposal seam: cluster orphan Concept names into proposed Topics."""
     calls = []
 
-    async def fake_propose(concepts):
-        calls.append([c["name"] for c in concepts])
+    async def fake_propose(topics, concepts):
+        calls.append(
+            {"topics": [t["name"] for t in topics], "names": [c["name"] for c in concepts]}
+        )
         name_to_group = {n: g for g, names in groups.items() for n in names}
         out: dict[str, list[int]] = {}
         for i, c in enumerate(concepts):
@@ -22,6 +36,126 @@ def stub_proposals(monkeypatch, groups: dict[str, list[str]]):
 
     monkeypatch.setattr("app.extraction.llm_propose_topics", fake_propose)
     return calls
+
+
+async def test_mixed_sibling_domains_propose_one_broad_topic(
+    client, make_user, monkeypatch
+):
+    """A Korean-learning + Chinese-learning Material yields one broad
+    'Language Learning' proposal covering both Concepts, marked as new
+    (topic_id None) since no matching Topic exists yet (issue #60)."""
+    _, auth = await make_user()
+    stub_llm(
+        monkeypatch,
+        concepts=[
+            concept_of("core", "Korean particles"),
+            concept_of("core", "Chinese tones"),
+        ],
+    )
+    stub_router(monkeypatch, {"Korean particles": None, "Chinese tones": None})
+    stub_proposals(
+        monkeypatch,
+        {"Language Learning": ["Korean particles", "Chinese tones"]},
+    )
+
+    _, events = await paste_and_extract(client, auth)
+
+    [proposal] = events[-1]["proposals"]
+    assert proposal["name"] == "Language Learning"
+    assert proposal["topic_id"] is None
+    assert len(proposal["concept_ids"]) == 2
+
+
+async def test_existing_broad_topic_is_reused_in_proposals(client, make_user, monkeypatch):
+    """The proposer sees the user's existing Topics; a proposal matching one is
+    a reuse — its topic_id points at that Topic instead of minting a new one."""
+    _, auth = await make_user()
+    lang_topic = await make_topic(client, auth, "Language Learning")
+    stub_llm(monkeypatch, concepts=[concept_of("core", "Korean particles")])
+    stub_router(monkeypatch, {"Korean particles": None})
+    calls = stub_proposals(monkeypatch, {"Language Learning": ["Korean particles"]})
+
+    _, events = await paste_and_extract(client, auth)
+
+    assert calls[0]["topics"] == ["Language Learning"]
+    [proposal] = events[-1]["proposals"]
+    assert proposal["name"] == "Language Learning"
+    assert proposal["topic_id"] == lang_topic
+
+
+async def test_broad_grouping_keeps_unrelated_subjects_apart(
+    client, make_user, monkeypatch
+):
+    """Sibling language subfields share one bucket, but an unrelated subject
+    (bookkeeping) stays its own proposal — broad, not merged (issue #60)."""
+    _, auth = await make_user()
+    stub_llm(
+        monkeypatch,
+        concepts=[
+            concept_of("core", "Korean particles"),
+            concept_of("core", "Chinese tones"),
+            concept_of("core", "Double-entry bookkeeping"),
+        ],
+    )
+    stub_router(
+        monkeypatch,
+        {"Korean particles": None, "Chinese tones": None, "Double-entry bookkeeping": None},
+    )
+    stub_proposals(
+        monkeypatch,
+        {
+            "Language Learning": ["Korean particles", "Chinese tones"],
+            "Accounting": ["Double-entry bookkeeping"],
+        },
+    )
+
+    _, events = await paste_and_extract(client, auth)
+
+    by_name = {p["name"]: p for p in events[-1]["proposals"]}
+    assert set(by_name) == {"Language Learning", "Accounting"}
+    assert len(by_name["Language Learning"]["concept_ids"]) == 2
+    assert len(by_name["Accounting"]["concept_ids"]) == 1
+
+
+async def test_user_can_rename_or_split_a_broad_proposal_at_confirmation(
+    client, make_user, monkeypatch
+):
+    """A broad proposal is only a suggestion: the user can split it into
+    Topics of their own naming and file each Concept where they choose."""
+    _, auth = await make_user()
+    stub_llm(
+        monkeypatch,
+        concepts=[
+            concept_of("core", "Korean particles"),
+            concept_of("core", "Chinese tones"),
+        ],
+    )
+    stub_router(monkeypatch, {"Korean particles": None, "Chinese tones": None})
+    stub_proposals(
+        monkeypatch,
+        {"Language Learning": ["Korean particles", "Chinese tones"]},
+    )
+    _, events = await paste_and_extract(client, auth)
+    [proposal] = events[-1]["proposals"]
+    concept_names = {c["id"]: c["name"] for c in events[-1]["concepts"]}
+
+    # Split: two user-named Topics instead of the proposed single bucket.
+    korean = (await client.post("/topics", json={"name": "Korean"}, headers=auth)).json()
+    chinese = (await client.post("/topics", json={"name": "Chinese"}, headers=auth)).json()
+    target = {"Korean particles": korean["id"], "Chinese tones": chinese["id"]}
+    for concept_id in proposal["concept_ids"]:
+        moved = await client.patch(
+            f"/concepts/{concept_id}",
+            json={"topic_id": target[concept_names[concept_id]]},
+            headers=auth,
+        )
+        assert moved.status_code == 200
+
+    [in_korean] = (await client.get(f"/topics/{korean['id']}/concepts", headers=auth)).json()
+    assert in_korean["name"] == "Korean particles"
+    [in_chinese] = (await client.get(f"/topics/{chinese['id']}/concepts", headers=auth)).json()
+    assert in_chinese["name"] == "Chinese tones"
+    assert (await client.get("/concepts/unclassified", headers=auth)).json() == []
 
 
 async def test_first_paste_proposes_topics_without_committing_them(

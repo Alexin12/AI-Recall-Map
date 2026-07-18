@@ -174,13 +174,16 @@ class ProposalResult(BaseModel):
     proposals: list[ProposedTopic]
 
 
-async def propose_topics(concepts: list[dict]) -> list[dict]:
+async def propose_topics(topics: list[dict], concepts: list[dict]) -> list[dict]:
     """Cluster orphan Concepts into a few broad proposed Topics (ADR-0005).
 
-    `concepts` items carry name, explanation. Returns [{name, indexes}] —
-    proposals only; nothing is committed until the user confirms.
+    `topics` items carry the user's existing Topic names so a broad one can be
+    reused by exact name; `concepts` items carry name, explanation. Returns
+    [{name, indexes}] — proposals only; nothing is committed until the user
+    confirms.
     """
     client = AsyncAnthropic()
+    topic_listing = "\n".join(f"- {t['name']}" for t in topics)
     listing = "\n".join(
         f"- index: {i}\n  name: {c['name']}\n  explanation: {c['explanation']}"
         for i, c in enumerate(concepts)
@@ -189,7 +192,15 @@ async def propose_topics(concepts: list[dict]) -> list[dict]:
         model="claude-sonnet-5",
         max_tokens=16000,
         system=PROPOSAL_SYSTEM_PROMPT_V1,
-        messages=[{"role": "user", "content": f"Leftover Concepts:\n{listing}"}],
+        messages=[
+            {
+                "role": "user",
+                "content": (
+                    f"Existing Topics:\n{topic_listing or '(none)'}\n\n"
+                    f"Leftover Concepts:\n{listing}"
+                ),
+            }
+        ],
         output_format=ProposalResult,
     )
     return [{"name": p.name, "indexes": p.indexes} for p in response.parsed_output.proposals]
