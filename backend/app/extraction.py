@@ -232,11 +232,16 @@ async def extract_material(material_id: str, conn: UserConn) -> StreamingRespons
                 if orphans:
                     yield event({"type": "progress", "stage": "proposing"})
                     grouped = await llm_propose_topics(
-                        [{"name": c.name, "explanation": c.explanation} for c in orphans]
+                        topics,
+                        [{"name": c.name, "explanation": c.explanation} for c in orphans],
                     )
+                    # A proposal whose name matches an existing Topic is a
+                    # reuse of that Topic, not a new one (issue #60).
+                    id_by_name = {t["name"].lower(): t["id"] for t in topics}
                     proposals = [
                         {
                             "name": g["name"],
+                            "topic_id": id_by_name.get(g["name"].lower()),
                             "concept_ids": [orphans[i].id for i in g["indexes"]],
                         }
                         for g in grouped
