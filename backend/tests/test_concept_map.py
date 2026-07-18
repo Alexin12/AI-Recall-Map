@@ -4,6 +4,9 @@ Extraction emits a primary parent per Concept (plus an optional display-only
 second parent); the map endpoint returns the Topic's Concepts as a tree.
 """
 
+from sqlalchemy import text
+
+from app.db import engine
 from app.llm import ExtractedConcept
 
 from tests.test_extraction import make_material, make_topic, stub_llm
@@ -104,3 +107,13 @@ async def test_deleting_a_concept_reparents_children_to_roots(
     assert {n["name"] for n in tree} == {"RAG", "Vector databases"}
     assert all(n["children"] == [] for n in tree)
     assert (await client.get(f"/concepts/{retrieval['id']}", headers=auth)).status_code == 404
+
+    # The Questions cascade with their Concept (issue #53 follow-up): none left.
+    async with engine.connect() as conn:
+        rows = (
+            await conn.execute(
+                text("SELECT 1 FROM questions WHERE concept_id = :id"),
+                {"id": retrieval["id"]},
+            )
+        ).all()
+    assert rows == []
