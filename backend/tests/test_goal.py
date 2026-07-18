@@ -167,6 +167,37 @@ async def test_relevance_override_wins_and_drives_scheduling(
     assert resp.json()["scheduled"] is False
 
 
+async def test_resaving_same_goal_is_noop_and_keeps_override(
+    client, make_user, monkeypatch
+):
+    """PATCHing the identical Goal must not rescore or clobber a user override
+    (issue #50 regression: Save Goal pressed again without changes)."""
+    _, auth = await make_user()
+    topic_id = await make_topic(client, auth)
+    await extract_concepts_into(client, auth, topic_id, ["RAG"], monkeypatch)
+    calls = stub_relevance(monkeypatch, {"RAG": "core"})
+    await client.patch(f"/topics/{topic_id}", json={"goal": "build RAG apps"}, headers=auth)
+    assert len(calls) == 1
+
+    concept_id = (await client.get(f"/topics/{topic_id}/concepts", headers=auth)).json()[0][
+        "id"
+    ]
+    await client.patch(
+        f"/concepts/{concept_id}", json={"goal_relevance": "irrelevant"}, headers=auth
+    )
+
+    resp = await client.patch(
+        f"/topics/{topic_id}", json={"goal": "build RAG apps"}, headers=auth
+    )
+    assert resp.status_code == 200
+    assert resp.json()["goal"] == "build RAG apps"
+    assert len(calls) == 1  # scoring seam not called a second time
+
+    concepts = (await client.get(f"/topics/{topic_id}/concepts", headers=auth)).json()
+    assert concepts[0]["goal_relevance"] == "irrelevant"
+    assert concepts[0]["scheduled"] is False
+
+
 async def test_user_level_goal_is_gone(client, make_user):
     """The global /goal endpoints and the goals table no longer exist (ADR-0006)."""
     _, auth = await make_user()
