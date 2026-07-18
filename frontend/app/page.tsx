@@ -319,8 +319,23 @@ export default function Home() {
           <h2>Where your concepts landed</h2>
           <ul>
             {routed.map((c) => (
-              <li key={c.id}>
-                {c.name} → {topicName(c.topic_id)}
+              <li key={c.id} style={{ marginBottom: 4 }}>
+                {c.name} →{" "}
+                <select
+                  value={c.topic_id ?? ""}
+                  onChange={(e) => {
+                    if (e.target.value) moveToTopic(c.id, e.target.value);
+                  }}
+                >
+                  <option value="" disabled>
+                    {topicName(c.topic_id)}
+                  </option>
+                  {topics.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name}
+                    </option>
+                  ))}
+                </select>
               </li>
             ))}
           </ul>
