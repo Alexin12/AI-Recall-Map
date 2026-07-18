@@ -1,4 +1,4 @@
-"""Concept Map endpoint: a Topic's Concepts and relationship rows (ADR-0002)."""
+"""Concept Map endpoint: a Topic's Concepts as a hierarchy tree (ADR-0007)."""
 
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel
@@ -9,72 +9,65 @@ from app.deps import UserConn
 router = APIRouter()
 
 
-class MapNode(BaseModel):
-    """One Concept as a map node."""
+class TreeNode(BaseModel):
+    """One Concept as a tree node, expandable down to its children."""
 
     id: str
     name: str
-    goal_relevance: str
+    display_label: str
+    goal_relevance: str | None
     scheduled: bool
     confirmed: bool
-
-
-class Relationship(BaseModel):
-    """One relationship row between two Concepts (plain Postgres row, ADR-0002)."""
-
-    id: str
-    from_concept_id: str
-    to_concept_id: str
-    kind: str
+    children: list["TreeNode"] = []
 
 
 class ConceptMap(BaseModel):
-    """Everything the frontend needs to render the Topic's Concept Map."""
+    """The Topic's Concept Map: root Concepts down to their details."""
 
-    nodes: list[MapNode]
-    relationships: list[Relationship]
+    tree: list[TreeNode]
 
 
 @router.get("/topics/{topic_id}/map", response_model=ConceptMap)
 async def concept_map(topic_id: str, conn: UserConn) -> ConceptMap:
-    """The Topic's Concepts and relationships (404 if not the user's Topic)."""
+    """The Topic's Concepts as a tree of parent pointers (404 if not the user's)."""
     found = await conn.execute(
         text("SELECT id FROM topics WHERE id = :id"), {"id": topic_id}
     )
     if found.first() is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Topic not found")
-    node_rows = await conn.execute(
-        text(
-            "SELECT id, name, goal_relevance, scheduled, confirmed FROM concepts "
-            "WHERE topic_id = :topic_id ORDER BY created_at"
-        ),
-        {"topic_id": topic_id},
-    )
-    rel_rows = await conn.execute(
-        text(
-            "SELECT id, from_concept_id, to_concept_id, kind FROM concept_relationships "
-            "WHERE topic_id = :topic_id ORDER BY created_at"
-        ),
-        {"topic_id": topic_id},
-    )
-    return ConceptMap(
-        nodes=[
-            MapNode(
-                id=str(r.id),
-                name=r.name,
-                goal_relevance=r.goal_relevance,
-                scheduled=r.scheduled,
-                confirmed=r.confirmed,
-            )
-            for r in node_rows
-        ],
-        relationships=[
-            Relationship(
-                id=str(r.id),
-                from_concept_id=str(r.from_concept_id),
-                to_concept_id=str(r.to_concept_id),
-                kind=r.kind,
-            )
-            for r in rel_rows
-        ],
-    )
+    rows = (
+        await conn.execute(
+            text(
+                "SELECT id, name, goal_relevance, scheduled, confirmed, "
+                "parent_concept_id, second_parent_name FROM concepts "
+                "WHERE topic_id = :topic_id ORDER BY created_at"
+            ),
+            {"topic_id": topic_id},
+        )
+    ).all()
+    nodes = {
+        str(r.id): TreeNode(
+            id=str(r.id),
+            name=r.name,
+            # A second parent is display-only (ADR-0007): a slash label keeps
+            # the tree single-parent without losing the second relationship.
+            display_label=(
+                f"{r.name} / {r.second_parent_name}" if r.second_parent_name else r.name
+            ),
+            goal_relevance=r.goal_relevance,
+            scheduled=r.scheduled,
+            confirmed=r.confirmed,
+            children=[],
+        )
+        for r in rows
+    }
+    roots: list[TreeNode] = []
+    for r in rows:
+        node = nodes[str(r.id)]
+        parent = nodes.get(str(r.parent_concept_id)) if r.parent_concept_id else None
+        # A parent outside this Topic (e.g. moved away) leaves the node a root.
+        if parent is None:
+            roots.append(node)
+        else:
+            parent.children.append(node)
+    return ConceptMap(tree=roots)

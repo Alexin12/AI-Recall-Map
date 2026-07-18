@@ -16,6 +16,9 @@ from sqlalchemy import text
 
 from app.deps import UserConn
 from app.llm import extract_concepts as llm_extract_concepts
+from app.llm import propose_topics as llm_propose_topics
+from app.llm import route_concepts as llm_route_concepts
+from app.llm import score_relevance as llm_score_relevance
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -34,12 +37,12 @@ class Concept(BaseModel):
     """One persisted Concept with its Questions."""
 
     id: str
-    topic_id: str
+    topic_id: str | None
     material_id: str
     name: str
     explanation: str
     source_snippet: str
-    goal_relevance: str
+    goal_relevance: str | None
     confidence: float
     scheduled: bool
     confirmed: bool
@@ -59,15 +62,27 @@ async def require_own_material(material_id: str, conn):
     return row
 
 
-async def fetch_goal(conn) -> str | None:
-    """Return the user's Goal content, or None if not set."""
-    result = await conn.execute(text("SELECT content FROM goals"))
+async def fetch_topic_goal(conn, topic_id) -> str | None:
+    """Return the Topic's Goal (ADR-0006: Goal lives on the Topic), or None."""
+    if topic_id is None:
+        return None
+    result = await conn.execute(
+        text("SELECT goal FROM topics WHERE id = :id"), {"id": str(topic_id)}
+    )
     row = result.first()
-    return row.content if row else None
+    return row.goal if row else None
 
 
-async def insert_concept(conn, material, extracted) -> Concept:
-    """Persist one extracted Concept plus its flashcard and written Questions."""
+async def insert_concept(
+    conn, material, extracted, goal: str | None, topic_id: str | None = None
+) -> Concept:
+    """Persist one extracted Concept plus its flashcard and written Questions.
+
+    topic_id overrides the Material's own Topic for the routed flow (ADR-0005);
+    None there means unclassified (the inbox).
+    """
+    if topic_id is None and material.topic_id is not None:
+        topic_id = str(material.topic_id)
     row = (
         await conn.execute(
             text(
@@ -79,15 +94,16 @@ async def insert_concept(conn, material, extracted) -> Concept:
                 "source_snippet, goal_relevance, confidence, scheduled, confirmed, created_at"
             ),
             {
-                "topic_id": str(material.topic_id),
+                "topic_id": topic_id,
                 "material_id": str(material.id),
                 "name": extracted.name,
                 "explanation": extracted.explanation,
                 "source_snippet": extracted.source_snippet,
-                "goal_relevance": extracted.goal_relevance,
+                # No Goal on the Topic means relevance is unknowable: leave it
+                # NULL and schedule nothing (ADR-0006).
+                "goal_relevance": extracted.goal_relevance if goal else None,
                 "confidence": extracted.confidence,
-                # Scheduling default: core Concepts enter review, others stay browsable.
-                "scheduled": extracted.goal_relevance == "core",
+                "scheduled": bool(goal) and extracted.goal_relevance in ("core", "supporting"),
             },
         )
     ).one()
@@ -111,7 +127,7 @@ async def insert_concept(conn, material, extracted) -> Concept:
         )
     return Concept(
         id=str(row.id),
-        topic_id=str(row.topic_id),
+        topic_id=str(row.topic_id) if row.topic_id else None,
         material_id=str(row.material_id),
         name=row.name,
         explanation=row.explanation,
@@ -125,11 +141,58 @@ async def insert_concept(conn, material, extracted) -> Concept:
     )
 
 
+async def link_parents(conn, extracted, concepts: list[Concept]) -> None:
+    """Persist the hierarchy (ADR-0007): resolve each Concept's parent_name to
+    its sibling from the same extraction; unknown or self parents stay roots."""
+    ids_by_name = {c.name: c.id for c in concepts}
+    for e, c in zip(extracted, concepts):
+        parent_id = ids_by_name.get(e.parent_name) if e.parent_name else None
+        if parent_id == c.id:
+            parent_id = None
+        if parent_id is None and e.second_parent_name is None:
+            continue
+        await conn.execute(
+            text(
+                "UPDATE concepts SET parent_concept_id = :parent_id, "
+                "second_parent_name = :second WHERE id = :id"
+            ),
+            {"id": c.id, "parent_id": parent_id, "second": e.second_parent_name},
+        )
+
+
+async def score_routed_concepts(conn, topics: list[dict], concepts: list[Concept]) -> None:
+    """Phase 2 for the routed flow (ADR-0006): score the just-routed Concepts of
+    each Goal-carrying Topic and schedule core/supporting; mirror onto the models."""
+    goals = {t["id"]: t["goal"] for t in topics if t["goal"]}
+    by_topic: dict[str, list[Concept]] = {}
+    for c in concepts:
+        if c.topic_id in goals:
+            by_topic.setdefault(c.topic_id, []).append(c)
+    for topic_id, topic_concepts in by_topic.items():
+        scores = await llm_score_relevance(
+            goals[topic_id],
+            [{"id": c.id, "name": c.name, "explanation": c.explanation} for c in topic_concepts],
+        )
+        for c in topic_concepts:
+            relevance = scores.get(c.id)
+            if relevance is None:
+                continue
+            c.goal_relevance = relevance
+            c.scheduled = relevance in ("core", "supporting")
+            await conn.execute(
+                text(
+                    "UPDATE concepts SET goal_relevance = :relevance, "
+                    "scheduled = :scheduled WHERE id = :id"
+                ),
+                {"id": c.id, "relevance": relevance, "scheduled": c.scheduled},
+            )
+
+
 @router.post("/materials/{material_id}/extract")
 async def extract_material(material_id: str, conn: UserConn) -> StreamingResponse:
     """Extract Concepts from a Material, streaming NDJSON progress then the result."""
     material = await require_own_material(material_id, conn)
-    goal = await fetch_goal(conn)
+    goal = await fetch_topic_goal(conn, material.topic_id)
 
     async def stream():
         def event(payload: dict) -> str:
@@ -141,18 +204,59 @@ async def extract_material(material_id: str, conn: UserConn) -> StreamingRespons
         yield event({"type": "progress", "stage": "extracting"})
         try:
             extracted = await llm_extract_concepts(material.content, goal)
-            # No Goal means relevance can't be judged, so cap "core" at
-            # "supporting" — otherwise every Material's own content reads as
-            # core and floods review (issue #26).
-            if goal is None:
-                extracted = [
-                    e.model_copy(update={"goal_relevance": "supporting"})
-                    if e.goal_relevance == "core"
-                    else e
-                    for e in extracted
+            if material.topic_id is None:
+                # Routed flow (ADR-0005): attribute each Concept to an existing
+                # Topic; what fits nowhere stays unclassified (the inbox).
+                yield event({"type": "progress", "stage": "routing"})
+                topic_rows = await conn.execute(
+                    text("SELECT id, name, goal FROM topics ORDER BY created_at")
+                )
+                topics = [
+                    {"id": str(t.id), "name": t.name, "goal": t.goal} for t in topic_rows
                 ]
+                routes = await llm_route_concepts(
+                    topics,
+                    [{"name": e.name, "explanation": e.explanation} for e in extracted],
+                )
+                yield event({"type": "progress", "stage": "saving", "count": len(extracted)})
+                concepts = [
+                    await insert_concept(conn, material, e, goal=None, topic_id=route)
+                    for e, route in zip(extracted, routes)
+                ]
+                await link_parents(conn, extracted, concepts)
+                await score_routed_concepts(conn, topics, concepts)
+                # Orphans are clustered into a few broad proposed Topics —
+                # proposals only; the user confirms before anything is created.
+                orphans = [c for c in concepts if c.topic_id is None]
+                proposals = []
+                if orphans:
+                    yield event({"type": "progress", "stage": "proposing"})
+                    grouped = await llm_propose_topics(
+                        topics,
+                        [{"name": c.name, "explanation": c.explanation} for c in orphans],
+                    )
+                    # A proposal whose name matches an existing Topic is a
+                    # reuse of that Topic, not a new one (issue #60).
+                    id_by_name = {t["name"].lower(): t["id"] for t in topics}
+                    proposals = [
+                        {
+                            "name": g["name"],
+                            "topic_id": id_by_name.get(g["name"].lower()),
+                            "concept_ids": [orphans[i].id for i in g["indexes"]],
+                        }
+                        for g in grouped
+                    ]
+                yield event(
+                    {
+                        "type": "result",
+                        "concepts": [c.model_dump(mode="json") for c in concepts],
+                        "proposals": proposals,
+                    }
+                )
+                return
             yield event({"type": "progress", "stage": "saving", "count": len(extracted)})
-            concepts = [await insert_concept(conn, material, e) for e in extracted]
+            concepts = [await insert_concept(conn, material, e, goal) for e in extracted]
+            await link_parents(conn, extracted, concepts)
             yield event(
                 {"type": "result", "concepts": [c.model_dump(mode="json") for c in concepts]}
             )

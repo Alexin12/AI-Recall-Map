@@ -35,9 +35,9 @@ def stub_grading(monkeypatch, grade: GradeResult | None = None):
 async def confirmed_scheduled_concept(client, auth, monkeypatch) -> tuple[str, dict]:
     """Extract one core Concept and confirm it; return (topic_id, concept)."""
     stub_llm(monkeypatch, concepts=[concept_of("core", "Core idea")])
-    # A Goal must be set for "core" relevance to survive (issue #26).
-    await client.put("/goal", json={"content": "Learn the idea"}, headers=auth)
+    # The Topic needs a Goal for extraction-time relevance to be kept (ADR-0006).
     topic_id = await make_topic(client, auth)
+    await client.patch(f"/topics/{topic_id}", json={"goal": "Learn the idea"}, headers=auth)
     material_id = await make_material(client, auth, topic_id)
     await client.post(f"/materials/{material_id}/extract", headers=auth)
     await client.post(f"/materials/{material_id}/confirm", headers=auth)
@@ -49,10 +49,10 @@ async def test_due_list_shows_only_confirmed_scheduled_concepts(client, make_use
     _, auth = await make_user()
     stub_llm(
         monkeypatch,
-        concepts=[concept_of("core", "Core idea"), concept_of("supporting", "Supporting idea")],
+        concepts=[concept_of("core", "Core idea"), concept_of("irrelevant", "Irrelevant idea")],
     )
-    await client.put("/goal", json={"content": "Learn the idea"}, headers=auth)
     topic_id = await make_topic(client, auth)
+    await client.patch(f"/topics/{topic_id}", json={"goal": "Learn the idea"}, headers=auth)
     material_id = await make_material(client, auth, topic_id)
     await client.post(f"/materials/{material_id}/extract", headers=auth)
 

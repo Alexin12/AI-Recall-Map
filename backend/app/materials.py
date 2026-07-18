@@ -22,12 +22,34 @@ class MaterialCreate(BaseModel):
 
 
 class Material(BaseModel):
-    """A single Material row owned by the authenticated user."""
+    """A single Material row; topic_id is NULL for a raw unsorted paste (ADR-0005)."""
 
     id: str
-    topic_id: str
+    topic_id: str | None
     content: str
     created_at: datetime
+
+
+def material_from_row(r) -> Material:
+    return Material(
+        id=str(r.id),
+        topic_id=str(r.topic_id) if r.topic_id else None,
+        content=r.content,
+        created_at=r.created_at,
+    )
+
+
+def require_material_size(content: str) -> None:
+    """413 when a paste exceeds the in-request extraction cap (ADR-0004)."""
+    if len(content) > MATERIAL_MAX_CHARS:
+        raise HTTPException(
+            status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+            detail=(
+                f"Material is too large: {len(content)} characters, "
+                f"the limit is {MATERIAL_MAX_CHARS}. Please split the material "
+                "into smaller pieces and paste them separately."
+            ),
+        )
 
 
 async def require_own_topic(topic_id: str, conn) -> None:
@@ -66,15 +88,7 @@ async def list_materials(topic_id: str, conn: UserConn) -> list[Material]:
 async def create_material(topic_id: str, body: MaterialCreate, conn: UserConn) -> Material:
     """Insert a Material into the user's Topic (user_id defaults to auth.uid())."""
     await require_own_topic(topic_id, conn)
-    if len(body.content) > MATERIAL_MAX_CHARS:
-        raise HTTPException(
-            status_code=status.HTTP_413_CONTENT_TOO_LARGE,
-            detail=(
-                f"Material is too large: {len(body.content)} characters, "
-                f"the limit is {MATERIAL_MAX_CHARS}. Please split the material "
-                "into smaller pieces and paste them separately."
-            ),
-        )
+    require_material_size(body.content)
     result = await conn.execute(
         text(
             "INSERT INTO materials (topic_id, content) VALUES (:topic_id, :content) "
@@ -82,7 +96,18 @@ async def create_material(topic_id: str, body: MaterialCreate, conn: UserConn) -
         ),
         {"topic_id": topic_id, "content": body.content},
     )
-    r = result.one()
-    return Material(
-        id=str(r.id), topic_id=str(r.topic_id), content=r.content, created_at=r.created_at
+    return material_from_row(result.one())
+
+
+@router.post("/materials", response_model=Material, status_code=status.HTTP_201_CREATED)
+async def create_unsorted_material(body: MaterialCreate, conn: UserConn) -> Material:
+    """Global Home paste: a raw Material with no Topic chosen up front (ADR-0005)."""
+    require_material_size(body.content)
+    result = await conn.execute(
+        text(
+            "INSERT INTO materials (content) VALUES (:content) "
+            "RETURNING id, topic_id, content, created_at"
+        ),
+        {"content": body.content},
     )
+    return material_from_row(result.one())

@@ -6,18 +6,12 @@ export type Ping = {
   created_at: string;
 };
 
-// Hand-synced with the backend Pydantic model app/goals.py -> Goal.
-export type Goal = {
-  id: string;
-  content: string;
-  created_at: string;
-  updated_at: string;
-};
-
 // Hand-synced with the backend Pydantic model app/topics.py -> Topic.
+// goal is optional per Topic (ADR-0006); null = browse only, never due.
 export type Topic = {
   id: string;
   name: string;
+  goal: string | null;
   created_at: string;
 };
 
@@ -32,12 +26,12 @@ export type Question = {
 // Hand-synced with the backend Pydantic model app/extraction.py -> Concept.
 export type Concept = {
   id: string;
-  topic_id: string;
+  topic_id: string | null;
   material_id: string;
   name: string;
   explanation: string;
   source_snippet: string;
-  goal_relevance: "irrelevant" | "supporting" | "core";
+  goal_relevance: "irrelevant" | "supporting" | "core" | null;
   confidence: number;
   scheduled: boolean;
   confirmed: boolean;
@@ -74,31 +68,25 @@ export type ConceptDetail = Concept & {
   reviews: Review[];
 };
 
-// Hand-synced with the backend Pydantic models app/concept_map.py.
-export type MapNode = {
+// Hand-synced with the backend Pydantic models app/concept_map.py (ADR-0007).
+export type TreeNode = {
   id: string;
   name: string;
-  goal_relevance: "irrelevant" | "supporting" | "core";
+  display_label: string;
+  goal_relevance: "irrelevant" | "supporting" | "core" | null;
   scheduled: boolean;
   confirmed: boolean;
-};
-
-export type Relationship = {
-  id: string;
-  from_concept_id: string;
-  to_concept_id: string;
-  kind: string;
+  children: TreeNode[];
 };
 
 export type ConceptMap = {
-  nodes: MapNode[];
-  relationships: Relationship[];
+  tree: TreeNode[];
 };
 
 // Hand-synced with the backend Pydantic model app/materials.py -> Material.
 export type Material = {
   id: string;
-  topic_id: string;
+  topic_id: string | null;
   content: string;
   created_at: string;
 };

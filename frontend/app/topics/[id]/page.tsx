@@ -28,21 +28,48 @@ async function getToken(): Promise<string> {
 export default function TopicPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const [materials, setMaterials] = useState<Material[]>([]);
-  const [content, setContent] = useState("");
   const [status, setStatus] = useState("Loading…");
-  const [pending, setPending] = useState<Concept[]>([]);
-  const [pendingMaterialId, setPendingMaterialId] = useState<string | null>(null);
   const [concepts, setConcepts] = useState<Concept[]>([]);
   const [due, setDue] = useState<Concept[]>([]);
   const [map, setMap] = useState<ConceptMapData | null>(null);
-  const [goalSet, setGoalSet] = useState<boolean | null>(null);
+  const [goal, setGoal] = useState<string | null>(null);
+  const [goalDraft, setGoalDraft] = useState("");
+  const [showRelevance, setShowRelevance] = useState(true);
 
   async function loadGoal() {
     const token = await getToken();
-    const res = await fetch(`${API_URL}/goal`, {
+    const res = await fetch(`${API_URL}/topics`, {
       headers: { Authorization: `Bearer ${token}` },
     });
-    setGoalSet(res.ok); // 404 means no Goal is set yet
+    if (!res.ok) return;
+    const topics: { id: string; goal: string | null }[] = await res.json();
+    const topic = topics.find((t) => t.id === id);
+    setGoal(topic?.goal ?? null);
+    setGoalDraft(topic?.goal ?? "");
+  }
+
+  /** Set or clear this Topic's Goal; the backend rescores relevance (Phase 2). */
+  async function saveGoal(next: string | null) {
+    setStatus(next ? "Saving Goal and scoring relevance…" : "Clearing Goal…");
+    const token = await getToken();
+    const res = await fetch(`${API_URL}/topics/${id}`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ goal: next }),
+    });
+    if (!res.ok) {
+      setStatus(`Goal save failed (${res.status})`);
+      return;
+    }
+    const topic: { goal: string | null } = await res.json();
+    setGoal(topic.goal);
+    setGoalDraft(topic.goal ?? "");
+    setStatus(topic.goal ? "Goal saved — relevance rescored" : "Goal cleared");
+    await loadConcepts();
+    await loadDue();
   }
 
   async function loadConcepts() {
@@ -87,53 +114,11 @@ export default function TopicPage({ params }: { params: Promise<{ id: string }> 
     loadGoal().catch(() => {});
   }, []);
 
-  /** Call the extraction endpoint and render each streamed NDJSON progress event. */
-  async function extractMaterial(materialId: string, token: string) {
-    const res = await fetch(`${API_URL}/materials/${materialId}/extract`, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    if (!res.ok || !res.body) {
-      setStatus(`Extraction failed (${res.status})`);
-      return;
-    }
-    const reader = res.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = "";
-    let gotResult = false;
-    try {
-      for (;;) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n");
-        buffer = lines.pop() ?? "";
-        for (const line of lines) {
-          if (!line.trim()) continue;
-          const event = JSON.parse(line);
-          if (event.type === "progress") {
-            setStatus(`Extracting… (${event.stage})`);
-          } else if (event.type === "error") {
-            setStatus(`Extraction failed: ${event.message} — try pasting again`);
-            return;
-          } else if (event.type === "result") {
-            gotResult = true;
-            setStatus(`Extracted ${event.concepts.length} concept(s) — review them below`);
-            setPending(event.concepts);
-            setPendingMaterialId(materialId);
-          }
-        }
-      }
-    } catch {
-      setStatus("Extraction failed: connection lost — try pasting again");
-      return;
-    }
-    // A stream that closes without a result event is a failure too (issue #30).
-    if (!gotResult) setStatus("Extraction failed — try pasting again");
-  }
-
-  /** PATCH one field of a pending Concept and mirror the server's row locally. */
-  async function editConcept(conceptId: string, patch: Partial<Concept>) {
+  /** Override a Concept's relevance (the user's final say, story 14). */
+  async function overrideRelevance(
+    conceptId: string,
+    relevance: "irrelevant" | "supporting" | "core",
+  ) {
     const token = await getToken();
     const res = await fetch(`${API_URL}/concepts/${conceptId}`, {
       method: "PATCH",
@@ -141,161 +126,67 @@ export default function TopicPage({ params }: { params: Promise<{ id: string }> 
         "Content-Type": "application/json",
         Authorization: `Bearer ${token}`,
       },
-      body: JSON.stringify(patch),
+      body: JSON.stringify({ goal_relevance: relevance }),
     });
     if (!res.ok) {
-      setStatus(`Edit failed (${res.status})`);
+      setStatus(`Relevance override failed (${res.status})`);
       return;
     }
     const updated: Concept = await res.json();
-    setPending((prev) => prev.map((c) => (c.id === updated.id ? { ...c, ...updated } : c)));
-  }
-
-  async function deleteConcept(conceptId: string) {
-    const token = await getToken();
-    const res = await fetch(`${API_URL}/concepts/${conceptId}`, {
-      method: "DELETE",
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    if (!res.ok) {
-      setStatus(`Delete failed (${res.status})`);
-      return;
-    }
-    setPending((prev) => prev.filter((c) => c.id !== conceptId));
-  }
-
-  async function confirmConcepts() {
-    if (!pendingMaterialId) return;
-    const token = await getToken();
-    const res = await fetch(`${API_URL}/materials/${pendingMaterialId}/confirm`, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    if (!res.ok) {
-      setStatus(`Confirm failed (${res.status})`);
-      return;
-    }
-    const confirmed: Concept[] = await res.json();
-    setPending([]);
-    setPendingMaterialId(null);
-    setStatus(`Confirmed ${confirmed.length} concept(s)`);
-    await loadConcepts();
+    setConcepts((prev) => prev.map((c) => (c.id === updated.id ? { ...c, ...updated } : c)));
     await loadDue();
-  }
-
-  async function pasteMaterial(e: React.FormEvent) {
-    e.preventDefault();
-    if (!content.trim()) return;
-    setStatus("Pasting…");
-    const token = await getToken();
-    const res = await fetch(`${API_URL}/topics/${id}/materials`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({ content }),
-    });
-    if (!res.ok) {
-      const body = await res.json();
-      setStatus(typeof body.detail === "string" ? body.detail : `Paste failed (${res.status})`);
-      return;
-    }
-    setContent("");
-    const material = await res.json();
-    // Refresh the material list first: extractMaterial owns the status line
-    // from here on, so its success/failure message must not be overwritten.
-    await loadMaterials();
-    await extractMaterial(material.id, token);
-    // Show whatever extraction persisted even if the result event was missed.
-    await loadConcepts();
   }
 
   return (
     <main style={{ fontFamily: "system-ui", maxWidth: 640, margin: "40px auto", padding: 16 }}>
       <h1>Topic</h1>
       <p>Topic id: {id}</p>
-      {goalSet === false && (
-        <div
-          style={{
-            border: "1px solid #e0b400",
-            background: "#fff8e1",
-            padding: 12,
-            marginBottom: 16,
+      <section
+        style={{
+          border: goal ? "1px solid #ccc" : "1px solid #e0b400",
+          background: goal ? "transparent" : "#fff8e1",
+          padding: 12,
+          marginBottom: 16,
+        }}
+      >
+        <strong>Topic Goal</strong>
+        {!goal && (
+          <p style={{ margin: "4px 0" }}>
+            No Goal set — this Topic stays browsable but nothing is scored or scheduled
+            for review. Set a Goal to get relevance-based review.
+          </p>
+        )}
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (goalDraft.trim()) saveGoal(goalDraft.trim());
           }}
         >
-          <strong>No Goal set.</strong> Without a Goal, relevance can&apos;t be judged, so
-          nothing is marked <em>core</em> or scheduled for review.{" "}
-          <Link href="/goal">Set your Goal first</Link> to get goal-based filtering.
-        </div>
-      )}
-      <form onSubmit={pasteMaterial}>
-        <textarea
-          value={content}
-          onChange={(e) => setContent(e.target.value)}
-          placeholder="Paste material text here"
-          rows={8}
-          style={{ width: "100%", padding: 8 }}
-        />
-        <button type="submit" style={{ padding: "8px 16px", marginTop: 8 }}>
-          Paste material
-        </button>
-      </form>
-      <p>{status}</p>
-      {pending.length > 0 && (
-        <section style={{ border: "1px solid #ccc", padding: 12, marginBottom: 16 }}>
-          <h2>Confirm extracted concepts</h2>
-          {goalSet === false && (
-            <p style={{ color: "#8a6d00" }}>
-              No Goal set — relevance not judged. Set a Goal to mark concepts as core.
-            </p>
+          <input
+            value={goalDraft}
+            onChange={(e) => setGoalDraft(e.target.value)}
+            placeholder="e.g. build RAG apps for production"
+            style={{ width: "70%", padding: 8, marginRight: 8 }}
+          />
+          <button
+            type="submit"
+            disabled={!goalDraft.trim() || goalDraft.trim() === goal}
+            style={{ padding: "8px 16px" }}
+          >
+            Save Goal
+          </button>{" "}
+          {goal && (
+            <button type="button" onClick={() => saveGoal(null)}>
+              Clear Goal
+            </button>
           )}
-          <ul style={{ listStyle: "none", padding: 0 }}>
-            {pending.map((c) => (
-              <li key={c.id} style={{ borderBottom: "1px solid #eee", padding: "8px 0" }}>
-                <input
-                  defaultValue={c.name}
-                  onBlur={(e) => {
-                    if (e.target.value !== c.name) editConcept(c.id, { name: e.target.value });
-                  }}
-                  style={{ fontWeight: "bold", width: "100%", marginBottom: 4 }}
-                />
-                <textarea
-                  defaultValue={c.explanation}
-                  rows={2}
-                  onBlur={(e) => {
-                    if (e.target.value !== c.explanation)
-                      editConcept(c.id, { explanation: e.target.value });
-                  }}
-                  style={{ width: "100%", marginBottom: 4 }}
-                />
-                <small>
-                  “{c.source_snippet}” — {c.goal_relevance},{" "}
-                  <span title="How sure the extractor is that this is a real, distinct concept worth learning — not how relevant it is to your Goal.">
-                    concept confidence {Math.round(c.confidence * 100)}%
-                  </span>
-                </small>
-                <div>
-                  <label>
-                    <input
-                      type="checkbox"
-                      checked={c.scheduled}
-                      onChange={(e) => editConcept(c.id, { scheduled: e.target.checked })}
-                    />{" "}
-                    Schedule for review
-                  </label>{" "}
-                  <button type="button" onClick={() => deleteConcept(c.id)}>
-                    Delete
-                  </button>
-                </div>
-              </li>
-            ))}
-          </ul>
-          <button type="button" onClick={confirmConcepts} style={{ padding: "8px 16px" }}>
-            Confirm concepts
-          </button>
-        </section>
-      )}
+        </form>
+      </section>
+      <p>
+        Paste new material on the <Link href="/">Global Home</Link> — it routes concepts
+        into your topics automatically.
+      </p>
+      <p>{status}</p>
       <ul>
         {materials.map((m) => (
           <li key={m.id}>
@@ -305,7 +196,7 @@ export default function TopicPage({ params }: { params: Promise<{ id: string }> 
           </li>
         ))}
       </ul>
-      {map && map.nodes.length > 0 && (
+      {map && map.tree.length > 0 && (
         <>
           <h2>Concept Map</h2>
           <ConceptMap map={map} />
@@ -314,14 +205,55 @@ export default function TopicPage({ params }: { params: Promise<{ id: string }> 
       {concepts.length > 0 && (
         <>
           <h2>Concepts</h2>
-          <ul>
-            {concepts.map((c) => (
-              <li key={c.id}>
-                <Link href={`/concepts/${c.id}`}>{c.name}</Link> — {c.goal_relevance}
-                {c.confirmed ? "" : " (unconfirmed)"}
-              </li>
-            ))}
-          </ul>
+          <label style={{ fontSize: 14 }}>
+            <input
+              type="checkbox"
+              checked={showRelevance}
+              onChange={(e) => setShowRelevance(e.target.checked)}
+            />{" "}
+            Show relevance column
+          </label>
+          <table style={{ width: "100%", borderCollapse: "collapse", marginTop: 8 }}>
+            <thead>
+              <tr style={{ textAlign: "left", borderBottom: "1px solid #ccc" }}>
+                <th style={{ padding: 4 }}>Concept</th>
+                {showRelevance && <th style={{ padding: 4 }}>Relevance (your override wins)</th>}
+                <th style={{ padding: 4 }}>Review</th>
+              </tr>
+            </thead>
+            <tbody>
+              {concepts.map((c) => (
+                <tr key={c.id} style={{ borderBottom: "1px solid #eee" }}>
+                  <td style={{ padding: 4 }}>
+                    <Link href={`/concepts/${c.id}`}>{c.name}</Link>
+                    {c.confirmed ? "" : " (unconfirmed)"}
+                  </td>
+                  {showRelevance && (
+                    <td style={{ padding: 4 }}>
+                      <select
+                        value={c.goal_relevance ?? ""}
+                        disabled={!goal}
+                        onChange={(e) =>
+                          overrideRelevance(
+                            c.id,
+                            e.target.value as "irrelevant" | "supporting" | "core",
+                          )
+                        }
+                      >
+                        <option value="" disabled>
+                          {goal ? "unscored" : "no Goal"}
+                        </option>
+                        <option value="irrelevant">irrelevant</option>
+                        <option value="supporting">supporting</option>
+                        <option value="core">core</option>
+                      </select>
+                    </td>
+                  )}
+                  <td style={{ padding: 4 }}>{c.scheduled ? "scheduled" : "—"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </>
       )}
       <h2>Due for review</h2>
