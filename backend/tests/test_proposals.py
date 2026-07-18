@@ -93,6 +93,51 @@ async def test_confirming_a_proposal_creates_topic_with_goal_and_files_concepts(
     assert (await client.get("/concepts/unclassified", headers=auth)).json() == []
 
 
+async def test_double_submitting_a_confirmation_creates_one_topic(
+    client, make_user, monkeypatch
+):
+    """POST /topics/confirm twice with the same payload (issue #52 double-click):
+    exactly one Topic, Concepts filed and scored exactly once."""
+    _, auth = await make_user()
+    stub_llm(
+        monkeypatch,
+        concepts=[concept_of("core", "Chunking"), concept_of("core", "Embeddings")],
+    )
+    stub_router(monkeypatch, {"Chunking": None, "Embeddings": None})
+    stub_proposals(monkeypatch, {"RAG": ["Chunking", "Embeddings"]})
+    _, events = await paste_and_extract(client, auth)
+    [proposal] = events[-1]["proposals"]
+
+    score_calls = []
+
+    async def fake_score(goal, concepts):
+        score_calls.append(goal)
+        return {c["id"]: "core" for c in concepts}
+
+    monkeypatch.setattr("app.confirmation.llm_score_relevance", fake_score)
+    payload = {
+        "name": "RAG",
+        "goal": "build RAG apps",
+        "concept_ids": proposal["concept_ids"],
+    }
+
+    first = await client.post("/topics/confirm", json=payload, headers=auth)
+    second = await client.post("/topics/confirm", json=payload, headers=auth)
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert second.json()["id"] == first.json()["id"]
+
+    topics = (await client.get("/topics", headers=auth)).json()
+    assert len(topics) == 1
+    assert topics[0]["goal"] == "build RAG apps"
+    assert score_calls == ["build RAG apps"]  # scored once, not per submit
+
+    filed = (await client.get(f"/topics/{topics[0]['id']}/concepts", headers=auth)).json()
+    assert {c["name"] for c in filed} == {"Chunking", "Embeddings"}
+    assert all(c["goal_relevance"] == "core" and c["scheduled"] for c in filed)
+    assert (await client.get("/concepts/unclassified", headers=auth)).json() == []
+
+
 async def test_dropping_a_concept_to_the_inbox(client, make_user, monkeypatch):
     """An explicit null topic_id unfiles the Concept: back to the inbox, unscored."""
     _, auth = await make_user()
