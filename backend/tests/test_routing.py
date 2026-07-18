@@ -140,6 +140,9 @@ async def test_move_concept_from_inbox_and_between_topics(client, make_user, mon
     assert moved.json()["goal_relevance"] == "supporting"
     assert moved.json()["scheduled"] is True
     assert (await client.get("/concepts/unclassified", headers=auth)).json() == []
+    [classified] = (await client.get("/concepts/classified", headers=auth)).json()
+    assert classified["id"] == orphan["id"]
+    assert classified["topic_id"] == rag_topic
 
     # Moving on to a Goal-less Topic unscores and unschedules it again.
     moved = await client.patch(
@@ -148,3 +151,5 @@ async def test_move_concept_from_inbox_and_between_topics(client, make_user, mon
     assert moved.json()["topic_id"] == css_topic
     assert moved.json()["goal_relevance"] is None
     assert moved.json()["scheduled"] is False
+    [classified] = (await client.get("/concepts/classified", headers=auth)).json()
+    assert classified["topic_id"] == css_topic
