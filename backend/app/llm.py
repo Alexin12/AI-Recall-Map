@@ -3,9 +3,10 @@
 This is the single boundary tests stub; everything downstream is real code.
 """
 
+import os
 from typing import Literal
 
-from anthropic import AsyncAnthropic
+from openai import AsyncOpenAI
 from pydantic import BaseModel
 
 from app.prompts.extraction_v1 import EXTRACTION_SYSTEM_PROMPT_V1
@@ -13,6 +14,16 @@ from app.prompts.grading_v1 import GRADING_SYSTEM_PROMPT_V1
 from app.prompts.relevance_v1 import RELEVANCE_SYSTEM_PROMPT_V1
 from app.prompts.proposal_v1 import PROPOSAL_SYSTEM_PROMPT_V1
 from app.prompts.router_v1 import ROUTER_SYSTEM_PROMPT_V1
+
+OPENROUTER_MODEL = "deepseek/deepseek-v4-flash"
+
+
+def _client() -> AsyncOpenAI:
+    """OpenRouter speaks the OpenAI Chat Completions API, not Anthropic's."""
+    return AsyncOpenAI(
+        base_url="https://openrouter.ai/api/v1",
+        api_key=os.environ["OPENROUTER_API_KEY"],
+    )
 
 
 class ExtractedConcept(BaseModel):
@@ -50,12 +61,11 @@ async def grade_answer(
     explanation: str, source_snippet: str, question_prompt: str, answer: str
 ) -> GradeResult:
     """Grade one answer from the Concept's explanation + snippet only (ADR-0001)."""
-    client = AsyncAnthropic()
-    response = await client.messages.parse(
-        model="claude-sonnet-5",
+    response = await _client().beta.chat.completions.parse(
+        model=OPENROUTER_MODEL,
         max_tokens=16000,
-        system=GRADING_SYSTEM_PROMPT_V1,
         messages=[
+            {"role": "system", "content": GRADING_SYSTEM_PROMPT_V1},
             {
                 "role": "user",
                 "content": (
@@ -66,9 +76,9 @@ async def grade_answer(
                 ),
             }
         ],
-        output_format=GradeResult,
+        response_format=GradeResult,
     )
-    return response.parsed_output
+    return response.choices[0].message.parsed
 
 
 class ScoredConcept(BaseModel):
@@ -89,24 +99,23 @@ async def score_relevance(goal: str, concepts: list[dict]) -> dict[str, str]:
 
     `concepts` items carry id, name, explanation; returns {concept_id: relevance}.
     """
-    client = AsyncAnthropic()
     listing = "\n".join(
         f"- id: {c['id']}\n  name: {c['name']}\n  explanation: {c['explanation']}"
         for c in concepts
     )
-    response = await client.messages.parse(
-        model="claude-sonnet-5",
+    response = await _client().beta.chat.completions.parse(
+        model=OPENROUTER_MODEL,
         max_tokens=16000,
-        system=RELEVANCE_SYSTEM_PROMPT_V1,
         messages=[
+            {"role": "system", "content": RELEVANCE_SYSTEM_PROMPT_V1},
             {
                 "role": "user",
                 "content": f"The Topic's Goal: {goal}\n\nConcepts:\n{listing}",
             }
         ],
-        output_format=RelevanceResult,
+        response_format=RelevanceResult,
     )
-    return {s.id: s.goal_relevance for s in response.parsed_output.scores}
+    return {s.id: s.goal_relevance for s in response.choices[0].message.parsed.scores}
 
 
 class RoutedConcept(BaseModel):
@@ -129,7 +138,6 @@ async def route_concepts(topics: list[dict], concepts: list[dict]) -> list[str |
     explanation. Returns one topic_id-or-None per Concept, aligned by position.
     The router never mints Topics: unknown topic ids collapse to None.
     """
-    client = AsyncAnthropic()
     topic_listing = "\n".join(
         f"- id: {t['id']}\n  name: {t['name']}\n  goal: {t.get('goal') or 'none'}"
         for t in topics
@@ -138,11 +146,11 @@ async def route_concepts(topics: list[dict], concepts: list[dict]) -> list[str |
         f"- index: {i}\n  name: {c['name']}\n  explanation: {c['explanation']}"
         for i, c in enumerate(concepts)
     )
-    response = await client.messages.parse(
-        model="claude-sonnet-5",
+    response = await _client().beta.chat.completions.parse(
+        model=OPENROUTER_MODEL,
         max_tokens=16000,
-        system=ROUTER_SYSTEM_PROMPT_V1,
         messages=[
+            {"role": "system", "content": ROUTER_SYSTEM_PROMPT_V1},
             {
                 "role": "user",
                 "content": (
@@ -151,10 +159,10 @@ async def route_concepts(topics: list[dict], concepts: list[dict]) -> list[str |
                 ),
             }
         ],
-        output_format=RoutingResult,
+        response_format=RoutingResult,
     )
     known = {t["id"] for t in topics}
-    by_index = {d.index: d.topic_id for d in response.parsed_output.decisions}
+    by_index = {d.index: d.topic_id for d in response.choices[0].message.parsed.decisions}
     return [
         by_index.get(i) if by_index.get(i) in known else None
         for i in range(len(concepts))
@@ -182,17 +190,16 @@ async def propose_topics(topics: list[dict], concepts: list[dict]) -> list[dict]
     [{name, indexes}] — proposals only; nothing is committed until the user
     confirms.
     """
-    client = AsyncAnthropic()
     topic_listing = "\n".join(f"- {t['name']}" for t in topics)
     listing = "\n".join(
         f"- index: {i}\n  name: {c['name']}\n  explanation: {c['explanation']}"
         for i, c in enumerate(concepts)
     )
-    response = await client.messages.parse(
-        model="claude-sonnet-5",
+    response = await _client().beta.chat.completions.parse(
+        model=OPENROUTER_MODEL,
         max_tokens=16000,
-        system=PROPOSAL_SYSTEM_PROMPT_V1,
         messages=[
+            {"role": "system", "content": PROPOSAL_SYSTEM_PROMPT_V1},
             {
                 "role": "user",
                 "content": (
@@ -201,25 +208,27 @@ async def propose_topics(topics: list[dict], concepts: list[dict]) -> list[dict]
                 ),
             }
         ],
-        output_format=ProposalResult,
+        response_format=ProposalResult,
     )
-    return [{"name": p.name, "indexes": p.indexes} for p in response.parsed_output.proposals]
+    return [
+        {"name": p.name, "indexes": p.indexes}
+        for p in response.choices[0].message.parsed.proposals
+    ]
 
 
 async def extract_concepts(material_content: str, goal: str | None) -> list[ExtractedConcept]:
     """Call the LLM with Structured Outputs; return the extracted Concepts."""
-    client = AsyncAnthropic()
     goal_line = f"The user's learning Goal: {goal}" if goal else "The user has not set a Goal."
-    response = await client.messages.parse(
-        model="claude-sonnet-5",
+    response = await _client().beta.chat.completions.parse(
+        model=OPENROUTER_MODEL,
         max_tokens=16000,
-        system=EXTRACTION_SYSTEM_PROMPT_V1,
         messages=[
+            {"role": "system", "content": EXTRACTION_SYSTEM_PROMPT_V1},
             {
                 "role": "user",
                 "content": f"{goal_line}\n\nMaterial:\n{material_content}",
             }
         ],
-        output_format=ExtractionResult,
+        response_format=ExtractionResult,
     )
-    return response.parsed_output.concepts
+    return response.choices[0].message.parsed.concepts
