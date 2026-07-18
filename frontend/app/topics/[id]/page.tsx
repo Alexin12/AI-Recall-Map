@@ -168,7 +168,11 @@ export default function TopicPage({ params }: { params: Promise<{ id: string }> 
             placeholder="e.g. build RAG apps for production"
             style={{ width: "70%", padding: 8, marginRight: 8 }}
           />
-          <button type="submit" style={{ padding: "8px 16px" }}>
+          <button
+            type="submit"
+            disabled={!goalDraft.trim() || goalDraft.trim() === goal}
+            style={{ padding: "8px 16px" }}
+          >
             Save Goal
           </button>{" "}
           {goal && (

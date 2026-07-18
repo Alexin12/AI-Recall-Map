@@ -63,7 +63,19 @@ async def create_topic(body: TopicCreate, conn: UserConn) -> Topic:
 
 @router.patch("/topics/{topic_id}", response_model=Topic)
 async def edit_topic(topic_id: str, body: TopicEdit, conn: UserConn) -> Topic:
-    """Set, change, or clear the Topic's Goal (404 if not the user's Topic)."""
+    """Set, change, or clear the Topic's Goal (404 if not the user's Topic).
+
+    Saving an unchanged Goal is an idempotent no-op: no rescore, so user
+    relevance overrides stay authoritative (issue #50 regression)."""
+    current = await conn.execute(
+        text("SELECT id, name, goal, created_at FROM topics WHERE id = :id"),
+        {"id": topic_id},
+    )
+    existing = current.first()
+    if existing is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Topic not found")
+    if body.goal == existing.goal:
+        return topic_from_row(existing)
     result = await conn.execute(
         text(
             "UPDATE topics SET goal = :goal WHERE id = :id "
@@ -72,8 +84,6 @@ async def edit_topic(topic_id: str, body: TopicEdit, conn: UserConn) -> Topic:
         {"id": topic_id, "goal": body.goal},
     )
     r = result.first()
-    if r is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Topic not found")
     if body.goal is not None:
         await rescore_topic(conn, topic_id, body.goal)
     else:
