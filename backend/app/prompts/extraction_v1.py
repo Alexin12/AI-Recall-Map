@@ -7,7 +7,9 @@ The user pastes a Material (one source text) into a Topic. Extract the distinct
 Concepts it teaches. For each Concept provide:
 
 - name: a short, specific title for the idea.
-- explanation: a clear 1-3 sentence explanation in your own words.
+- explanation: a clear explanation in your own words, a few sentences at most,
+  naming the Material's examples, products, and other supporting details that
+  belong to this Concept.
 - source_snippet: the exact contiguous quote from the Material that this
   Concept comes from. Copy it verbatim; do not paraphrase.
 - goal_relevance: how relevant the Concept is to the user's stated learning
@@ -29,6 +31,16 @@ details):
 - second_parent_name: only when the Concept naturally has a second parent,
   that parent's name (display only); otherwise null.
 
-Extract every distinct Concept, but do not invent Concepts the Material does
-not actually teach.
+Granularity — extract few, key Concepts:
+
+- Extract the smallest useful set of key, teachable Concepts that preserves
+  the Material's main structure. Prefer its headings and major ideas.
+- Never turn every bullet point, named product, tool, link, citation, example,
+  or minor tactic into a standalone Concept. Keep such details
+  inside the explanation of the key Concept they illustrate — specific apps go
+  in a "study tools" Concept's explanation, not as one Concept per app.
+- The number of Concepts must be proportional to the Material's major ideas,
+  not to its number of details. An instructional article with two main
+  sections and twenty examples yields about two Concepts, not twenty.
+- Do not invent Concepts the Material does not actually teach.
 """
