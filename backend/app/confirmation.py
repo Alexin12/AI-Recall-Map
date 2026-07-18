@@ -9,6 +9,7 @@ from sqlalchemy import text
 from app.deps import UserConn
 from app.extraction import Concept, Question
 from app.llm import score_relevance as llm_score_relevance
+from app.topics import Topic, topic_from_row
 
 router = APIRouter()
 
@@ -131,6 +132,70 @@ async def delete_concept(concept_id: str, conn: UserConn) -> None:
     )
     if result.first() is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Concept not found")
+
+
+class ProposalConfirm(BaseModel):
+    """Confirm one proposed Topic: its (edited) name, optional Goal, and the
+    Concepts to file into it."""
+
+    name: str
+    goal: str | None = None
+    concept_ids: list[str] = []
+
+
+@router.post("/topics/confirm", response_model=Topic)
+async def confirm_proposal(body: ProposalConfirm, conn: UserConn) -> Topic:
+    """Create the proposed Topic and file its Concepts in one request.
+
+    Runs in the request transaction, and a duplicate submit is idempotent
+    (issue #52): a same-named Topic is reused instead of duplicated, and only
+    still-unclassified Concepts are filed and scored — a second identical call
+    moves nothing and never re-calls the scoring LLM.
+    """
+    topic = (
+        await conn.execute(
+            text("SELECT id, name, goal, created_at FROM topics WHERE name = :name"),
+            {"name": body.name},
+        )
+    ).first()
+    if topic is None:
+        topic = (
+            await conn.execute(
+                text(
+                    "INSERT INTO topics (name, goal) VALUES (:name, :goal) "
+                    "RETURNING id, name, goal, created_at"
+                ),
+                {"name": body.name, "goal": body.goal},
+            )
+        ).one()
+    moved = (
+        await conn.execute(
+            text(
+                "UPDATE concepts SET topic_id = :topic_id "
+                "WHERE id = ANY(:ids) AND topic_id IS NULL "
+                "RETURNING id, name, explanation"
+            ),
+            {"topic_id": str(topic.id), "ids": body.concept_ids},
+        )
+    ).all()
+    if topic.goal and moved:
+        scores = await llm_score_relevance(
+            topic.goal,
+            [{"id": str(r.id), "name": r.name, "explanation": r.explanation} for r in moved],
+        )
+        for concept_id, relevance in scores.items():
+            await conn.execute(
+                text(
+                    "UPDATE concepts SET goal_relevance = :relevance, "
+                    "scheduled = :scheduled WHERE id = :id"
+                ),
+                {
+                    "id": concept_id,
+                    "relevance": relevance,
+                    "scheduled": relevance in ("core", "supporting"),
+                },
+            )
+    return topic_from_row(topic)
 
 
 @router.post("/materials/{material_id}/confirm", response_model=list[Concept])

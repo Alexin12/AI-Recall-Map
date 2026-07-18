@@ -39,6 +39,7 @@ export default function Home() {
   const [routed, setRouted] = useState<Concept[]>([]);
   const [inbox, setInbox] = useState<Concept[]>([]);
   const [proposals, setProposals] = useState<Proposal[]>([]);
+  const [confirming, setConfirming] = useState(false);
 
   async function loadTopics() {
     const token = await getToken();
@@ -138,43 +139,66 @@ export default function Home() {
     await loadInbox();
   }
 
-  /** Confirm one proposed Topic: create it (with its optional Goal) and file
-   * its Concepts in — the backend scores them against the Goal on the way. */
+  /** Confirm one proposed Topic: one atomic backend call creates it (with its
+   * optional Goal) and files + scores its Concepts; a double submit is a no-op. */
   async function confirmProposal(index: number) {
     const proposal = proposals[index];
-    if (!proposal.name.trim()) return;
+    if (!proposal.name.trim() || confirming) return;
+    setConfirming(true);
     setStatus(`Creating topic "${proposal.name}"…`);
-    const token = await getToken();
-    const res = await fetch(`${API_URL}/topics`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({
-        name: proposal.name.trim(),
-        goal: proposal.goal.trim() || null,
-      }),
-    });
-    if (!res.ok) {
-      setStatus(`Topic creation failed (${res.status})`);
-      return;
-    }
-    const topic: Topic = await res.json();
-    for (const conceptId of proposal.concept_ids) {
-      await fetch(`${API_URL}/concepts/${conceptId}`, {
-        method: "PATCH",
+    try {
+      const token = await getToken();
+      const res = await fetch(`${API_URL}/topics/confirm`, {
+        method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ topic_id: topic.id }),
+        body: JSON.stringify({
+          name: proposal.name.trim(),
+          goal: proposal.goal.trim() || null,
+          concept_ids: proposal.concept_ids,
+        }),
       });
+      if (!res.ok) {
+        setStatus(`Topic creation failed (${res.status})`);
+        return;
+      }
+      const topic: Topic = await res.json();
+      setProposals((prev) => prev.filter((_, i) => i !== index));
+      setRouted((prev) =>
+        prev.map((c) =>
+          proposal.concept_ids.includes(c.id) ? { ...c, topic_id: topic.id } : c,
+        ),
+      );
+      setStatus(`Created "${topic.name}" and filed ${proposal.concept_ids.length} concept(s)`);
+      await loadTopics();
+      await loadInbox();
+    } finally {
+      setConfirming(false);
     }
-    setProposals((prev) => prev.filter((_, i) => i !== index));
-    setStatus(`Created "${topic.name}" and filed ${proposal.concept_ids.length} concept(s)`);
-    await loadTopics();
-    await loadInbox();
+  }
+
+  /** Move one Concept out of a proposal: to the inbox, to another proposal
+   * (local until that one is confirmed), or into an existing Topic (persisted). */
+  async function moveProposalConcept(index: number, conceptId: string, dest: string) {
+    if (dest.startsWith("topic:")) {
+      await moveToTopic(conceptId, dest.slice("topic:".length));
+    }
+    setProposals((prev) =>
+      prev
+        .map((p, i) => {
+          if (i === index) {
+            return { ...p, concept_ids: p.concept_ids.filter((id) => id !== conceptId) };
+          }
+          if (dest === `proposal:${i}`) {
+            return { ...p, concept_ids: [...p.concept_ids, conceptId] };
+          }
+          return p;
+        })
+        .filter((p) => p.concept_ids.length > 0),
+    );
+    if (dest === "inbox") await loadInbox();
   }
 
   /** Dismiss a proposal: its Concepts simply stay in the inbox. */
@@ -197,6 +221,7 @@ export default function Home() {
       setStatus(`Move failed (${res.status})`);
       return;
     }
+    setRouted((prev) => prev.map((c) => (c.id === conceptId ? { ...c, topic_id: topicId } : c)));
     await loadInbox();
   }
 
@@ -247,15 +272,42 @@ export default function Home() {
                 placeholder="Optional goal for this topic"
                 style={{ padding: 6, width: "45%", marginRight: 8 }}
               />
-              <button type="button" onClick={() => confirmProposal(i)}>
-                Create topic
+              <button type="button" disabled={confirming} onClick={() => confirmProposal(i)}>
+                {confirming ? "Creating…" : "Create topic"}
               </button>{" "}
-              <button type="button" onClick={() => dismissProposal(i)}>
+              <button type="button" disabled={confirming} onClick={() => dismissProposal(i)}>
                 Keep in inbox
               </button>
               <ul style={{ margin: "4px 0" }}>
                 {p.concept_ids.map((cid) => (
-                  <li key={cid}>{routed.find((c) => c.id === cid)?.name ?? cid}</li>
+                  <li key={cid} style={{ marginBottom: 2 }}>
+                    {routed.find((c) => c.id === cid)?.name ?? cid}{" "}
+                    <select
+                      value=""
+                      disabled={confirming}
+                      onChange={(e) => {
+                        if (e.target.value) moveProposalConcept(i, cid, e.target.value);
+                      }}
+                    >
+                      <option value="" disabled>
+                        Move to…
+                      </option>
+                      <option value="inbox">Inbox</option>
+                      {proposals.map(
+                        (q, j) =>
+                          j !== i && (
+                            <option key={j} value={`proposal:${j}`}>
+                              Proposed: {q.name}
+                            </option>
+                          ),
+                      )}
+                      {topics.map((t) => (
+                        <option key={t.id} value={`topic:${t.id}`}>
+                          {t.name}
+                        </option>
+                      ))}
+                    </select>
+                  </li>
                 ))}
               </ul>
             </div>
