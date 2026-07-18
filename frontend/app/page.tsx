@@ -40,6 +40,8 @@ export default function Home() {
   const [inbox, setInbox] = useState<Concept[]>([]);
   const [proposals, setProposals] = useState<Proposal[]>([]);
   const [confirming, setConfirming] = useState(false);
+  const [pendingMoves, setPendingMoves] = useState<Record<string, string>>({});
+  const [savingMoves, setSavingMoves] = useState(false);
 
   async function loadTopics() {
     const token = await getToken();
@@ -57,9 +59,18 @@ export default function Home() {
     if (res.ok) setInbox(await res.json());
   }
 
+  async function loadRouted() {
+    const token = await getToken();
+    const res = await fetch(`${API_URL}/concepts/classified`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (res.ok) setRouted(await res.json());
+  }
+
   useEffect(() => {
     loadTopics().catch((e) => setStatus(String(e)));
     loadInbox().catch(() => {});
+    loadRouted().catch(() => {});
   }, []);
 
   /** Paste → extract (streamed) → auto-confirm; then refresh the inbox. */
@@ -228,6 +239,20 @@ export default function Home() {
   const topicName = (topicId: string | null) =>
     topics.find((t) => t.id === topicId)?.name ?? "Inbox (unclassified)";
 
+  /** Persist all pending topic reassignments picked on the landing page. */
+  async function confirmPendingMoves() {
+    setSavingMoves(true);
+    try {
+      for (const [conceptId, topicId] of Object.entries(pendingMoves)) {
+        await moveToTopic(conceptId, topicId);
+      }
+      setPendingMoves({});
+      setStatus("Topic changes saved");
+    } finally {
+      setSavingMoves(false);
+    }
+  }
+
   return (
     <main style={{ fontFamily: "system-ui", maxWidth: 640, margin: "40px auto", padding: 16 }}>
       <h1>AI Recall Map</h1>
@@ -322,9 +347,17 @@ export default function Home() {
               <li key={c.id} style={{ marginBottom: 4 }}>
                 {c.name} →{" "}
                 <select
-                  value={c.topic_id ?? ""}
+                  value={pendingMoves[c.id] ?? c.topic_id ?? ""}
                   onChange={(e) => {
-                    if (e.target.value) moveToTopic(c.id, e.target.value);
+                    const topicId = e.target.value;
+                    if (!topicId) return;
+                    setPendingMoves((prev) =>
+                      topicId === c.topic_id
+                        ? Object.fromEntries(
+                            Object.entries(prev).filter(([id]) => id !== c.id),
+                          )
+                        : { ...prev, [c.id]: topicId },
+                    );
                   }}
                 >
                   <option value="" disabled>
@@ -339,6 +372,11 @@ export default function Home() {
               </li>
             ))}
           </ul>
+          {Object.keys(pendingMoves).length > 0 && (
+            <button type="button" disabled={savingMoves} onClick={confirmPendingMoves}>
+              {savingMoves ? "Saving…" : "Confirm topic changes"}
+            </button>
+          )}
         </section>
       )}
       <h2>Inbox</h2>

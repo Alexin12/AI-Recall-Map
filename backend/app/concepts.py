@@ -23,7 +23,7 @@ class ConceptDetail(Concept):
     reviews: list[Review] = []
 
 
-# Registered before /concepts/{concept_id} so "unclassified" isn't read as an id.
+# Registered before /concepts/{concept_id} so "unclassified"/"classified" isn't read as an id.
 @router.get("/concepts/unclassified", response_model=list[Concept])
 async def list_unclassified(conn: UserConn) -> list[Concept]:
     """The inbox: the user's Concepts with no Topic yet (ADR-0005)."""
@@ -31,6 +31,20 @@ async def list_unclassified(conn: UserConn) -> list[Concept]:
         text(
             f"SELECT {CONCEPT_COLUMNS} FROM concepts "
             "WHERE topic_id IS NULL ORDER BY created_at"
+        )
+    )
+    return [concept_from_row(r) for r in rows]
+
+
+@router.get("/concepts/classified", response_model=list[Concept])
+async def list_classified(conn: UserConn) -> list[Concept]:
+    """Concepts already routed to a Topic, most recent first — lets the Global
+    Home re-show "where your concepts landed" after a reload, so a reassignment
+    left unconfirmed isn't the user's only chance to move it (ADR-0005)."""
+    rows = await conn.execute(
+        text(
+            f"SELECT {CONCEPT_COLUMNS} FROM concepts "
+            "WHERE topic_id IS NOT NULL ORDER BY created_at DESC"
         )
     )
     return [concept_from_row(r) for r in rows]
