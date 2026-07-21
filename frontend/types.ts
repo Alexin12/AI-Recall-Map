@@ -92,6 +92,21 @@ export type Material = {
   created_at: string;
 };
 
+// Hand-synced with the backend Pydantic model app/all_concepts.py -> AllConceptsRow.
+export type AllConceptsRow = {
+  id: string;
+  name: string;
+  goal_relevance: "irrelevant" | "supporting" | "core" | null;
+  topic_id: string;
+  topic_name: string;
+  confirmed: boolean;
+  last_reviewed_at: string | null;
+  last_verdict: "fail" | "partial" | "pass" | "strong" | null;
+  next_due_date: string | null;
+  written_question: string | null;
+  written_answer: string | null;
+};
+
 // Hand-synced with the backend Pydantic models app/home.py.
 export type DueDay = {
   date: string;
