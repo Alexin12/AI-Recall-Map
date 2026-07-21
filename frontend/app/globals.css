@@ -189,6 +189,18 @@ select {
   background: var(--verdict-strong);
 }
 
+/* Neutral pill for Concept-name tags on the Material list (issue #29) —
+   deliberately not a Mastery/Verdict color, since a tag isn't a state. */
+.tag {
+  display: inline-block;
+  color: var(--color-text);
+  background: var(--color-sand);
+  font-size: var(--text-sm);
+  line-height: 1.3;
+  padding: 1px var(--space-2);
+  border-radius: 999px;
+}
+
 /* Global Home (issue #74): review-first hero, paste moved to a smaller side
    area, next-5-days/recently-learned/inbox-count as supporting panels. */
 .home-hero {

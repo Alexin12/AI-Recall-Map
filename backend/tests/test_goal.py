@@ -198,6 +198,36 @@ async def test_resaving_same_goal_is_noop_and_keeps_override(
     assert concepts[0]["scheduled"] is False
 
 
+async def test_clear_then_undo_restores_goal_and_rescores(client, make_user, monkeypatch):
+    """Issue #78: the frontend's Undo-after-clear is just a second PATCH with
+    the previous Goal value — confirm the existing endpoint round-trips that
+    correctly (clear unschedules everything, Undo restores and rescores)."""
+    _, auth = await make_user()
+    topic_id = await make_topic(client, auth)
+    await extract_concepts_into(client, auth, topic_id, ["RAG"], monkeypatch)
+    calls = stub_relevance(monkeypatch, {"RAG": "core"})
+    await client.patch(f"/topics/{topic_id}", json={"goal": "build RAG apps"}, headers=auth)
+    assert len(calls) == 1
+
+    cleared = await client.patch(f"/topics/{topic_id}", json={"goal": None}, headers=auth)
+    assert cleared.status_code == 200
+    assert cleared.json()["goal"] is None
+    concepts = (await client.get(f"/topics/{topic_id}/concepts", headers=auth)).json()
+    assert concepts[0]["goal_relevance"] is None
+    assert concepts[0]["scheduled"] is False
+
+    undone = await client.patch(
+        f"/topics/{topic_id}", json={"goal": "build RAG apps"}, headers=auth
+    )
+    assert undone.status_code == 200
+    assert undone.json()["goal"] == "build RAG apps"
+    assert len(calls) == 2  # rescored again on Undo
+
+    concepts = (await client.get(f"/topics/{topic_id}/concepts", headers=auth)).json()
+    assert concepts[0]["goal_relevance"] == "core"
+    assert concepts[0]["scheduled"] is True
+
+
 async def test_user_level_goal_is_gone(client, make_user):
     """The global /goal endpoints and the goals table no longer exist (ADR-0006)."""
     _, auth = await make_user()
