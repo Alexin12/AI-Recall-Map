@@ -24,7 +24,7 @@ async function getToken(): Promise<string> {
   return signup.session.access_token;
 }
 
-/** Topic Page: paste Materials now; mastery and the Concept Map arrive in later slices. */
+/** Topic Page: paste Materials now; mastery and the Concept Tree arrive in later slices. */
 export default function TopicPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const [materials, setMaterials] = useState<Material[]>([]);
@@ -195,8 +195,8 @@ export default function TopicPage({ params }: { params: Promise<{ id: string }> 
       </ul>
       {map && map.tree.length > 0 && (
         <>
-          <h2>Concept Map</h2>
-          <ConceptMap map={map} />
+          <h2>Concept Tree</h2>
+          <ConceptMap map={map} topicName={topicName} />
         </>
       )}
       {concepts.length > 0 && (
