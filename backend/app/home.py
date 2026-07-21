@@ -77,12 +77,17 @@ async def home_summary(conn: UserConn) -> HomeSummary:
         text(
             "SELECT (next_due_at AT TIME ZONE 'UTC')::date AS due_date, COUNT(*) AS n "
             "FROM concepts WHERE confirmed AND scheduled "
-            "AND next_due_at >= :start AND next_due_at < :end "
+            "AND next_due_at < :end "
             "GROUP BY due_date"
         ),
-        {"start": today_start, "end": range_end},
+        {"end": range_end},
     )
-    counts_by_date = {r.due_date: r.n for r in day_rows}
+    # Anything overdue from a prior day folds into today's bucket (no upper
+    # bound on how stale a due date has been sitting unreviewed).
+    counts_by_date: dict[date, int] = {}
+    for r in day_rows:
+        bucket_date = max(r.due_date, today)
+        counts_by_date[bucket_date] = counts_by_date.get(bucket_date, 0) + r.n
     next_five_days = [
         DueDay(
             date=today + timedelta(days=offset),

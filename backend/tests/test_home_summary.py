@@ -135,6 +135,25 @@ async def test_home_summary_returns_all_five_pieces_in_one_request(
     assert body["inbox_count"] == len(unclassified.json()) == 1
 
 
+async def test_next_five_days_folds_multi_day_overdue_into_today(
+    client, make_user, monkeypatch
+):
+    """A Concept overdue by several days must still count toward today's
+    bucket, not vanish because it falls before the 5-day window's start."""
+    _, auth = await make_user()
+    topic_id, concepts = await confirmed_topic(client, auth, monkeypatch, "Spanish", ["Stale idea"])
+    stale_c = concepts[0]
+
+    now = datetime.now(timezone.utc)
+    await set_next_due(stale_c["id"], now - timedelta(days=3))
+
+    resp = await client.get("/home/summary", headers=auth)
+    body = resp.json()
+    assert body["review_due_count"] == 1
+    assert body["next_five_days"][0]["count"] == 1
+    assert sum(d["count"] for d in body["next_five_days"][1:]) == 0
+
+
 async def test_home_summary_is_empty_for_a_new_user(client, make_user):
     _, auth = await make_user()
 
