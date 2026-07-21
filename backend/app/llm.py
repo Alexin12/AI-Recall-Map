@@ -40,6 +40,17 @@ class ExtractedConcept(BaseModel):
     # the same extraction (None = root), plus a display-only second parent.
     parent_name: str | None = None
     second_parent_name: str | None = None
+    # AI-enriched format (ADR-0008): a layered breakdown of the explanation.
+    # analogy and technical_explanation are always required; code_snippet is
+    # extract-only ("none" when the Material has no code, never invented);
+    # core_claim is optional. ai_supplemented_fields names any of
+    # {analogy, technical_explanation, core_claim} the model generated
+    # because the Material didn't already contain it.
+    analogy: str
+    technical_explanation: str
+    code_snippet: str = "none"
+    core_claim: str | None = None
+    ai_supplemented_fields: list[str] = []
 
 
 class ExtractionResult(BaseModel):

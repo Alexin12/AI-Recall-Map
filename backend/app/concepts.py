@@ -15,12 +15,20 @@ router = APIRouter()
 
 
 class ConceptDetail(Concept):
-    """A Concept plus its derived mastery, due state, and full review history."""
+    """A Concept plus its derived mastery, due state, and full review history.
+
+    `keyword` and `source_excerpt` complete the AI-enriched six-field template
+    (ADR-0008) alongside analogy/technical_explanation/code_snippet/core_claim
+    already on Concept; they alias name/source_snippet rather than duplicating
+    storage, since those already always anchor the Material.
+    """
 
     mastery: str
     due: bool
     next_due_at: datetime
     reviews: list[Review] = []
+    keyword: str
+    source_excerpt: str
 
 
 # Registered before /concepts/{concept_id} so "unclassified"/"classified" isn't read as an id.
@@ -108,4 +116,6 @@ async def concept_detail(concept_id: str, conn: UserConn) -> ConceptDetail:
         due=row.due,
         next_due_at=row.next_due_at,
         reviews=reviews,
+        keyword=base.name,
+        source_excerpt=base.source_snippet,
     )

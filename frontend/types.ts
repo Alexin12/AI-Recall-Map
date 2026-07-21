@@ -24,6 +24,9 @@ export type Question = {
 };
 
 // Hand-synced with the backend Pydantic model app/extraction.py -> Concept.
+// analogy/technical_explanation/code_snippet/core_claim/ai_supplemented_fields
+// are the AI-enriched six-field template (ADR-0008, alongside keyword/source_excerpt
+// on ConceptDetail below).
 export type Concept = {
   id: string;
   topic_id: string | null;
@@ -36,6 +39,11 @@ export type Concept = {
   scheduled: boolean;
   confirmed: boolean;
   created_at: string;
+  analogy: string;
+  technical_explanation: string;
+  code_snippet: string;
+  core_claim: string | null;
+  ai_supplemented_fields: string[];
   questions: Question[];
 };
 
@@ -66,6 +74,8 @@ export type ConceptDetail = Concept & {
   due: boolean;
   next_due_at: string;
   reviews: Review[];
+  keyword: string;
+  source_excerpt: string;
 };
 
 // Hand-synced with the backend Pydantic models app/concept_map.py (ADR-0007).
