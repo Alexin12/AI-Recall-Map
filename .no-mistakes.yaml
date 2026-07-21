@@ -1,0 +1,10 @@
+# Repo-level no-mistakes gate config (M3 e2e ADR).
+commands:
+  test: scripts/nm-test.sh
+
+test:
+  evidence:
+    # Playwright traces/screenshots are committed under this dir so they
+    # render directly on the PR, instead of staying in a temp dir.
+    store_in_repo: true
+    dir: .no-mistakes/evidence

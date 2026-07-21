@@ -129,20 +129,21 @@ export default function ReviewPage({ params }: { params: Promise<{ id: string }>
           <h2>{current.name}</h2>
           <p>{question.prompt}</p>
           <textarea
+            data-testid="review-answer-textarea"
             value={answer}
             onChange={(e) => setAnswer(e.target.value)}
             placeholder="Type your answer"
             rows={4}
             style={{ width: "100%", padding: 8 }}
           />
-          <button type="submit" style={{ padding: "8px 16px", marginTop: 8 }}>
+          <button data-testid="review-submit-button" type="submit" style={{ padding: "8px 16px", marginTop: 8 }}>
             Submit answer
           </button>
         </form>
       )}
       {result && (
         <section style={{ border: "1px solid #ccc", padding: 12 }}>
-          <h2>
+          <h2 data-testid="review-verdict">
             Verdict: {result.verdict}
             {result.verdict_overridden ? ` (AI said ${result.ai_verdict})` : ""}
           </h2>

@@ -50,7 +50,10 @@ function TreeBranch({ node }: { node: TreeNode }) {
 /** The Topic's Concept Map as an expandable hierarchy tree (ADR-0007). */
 export default function ConceptMap({ map }: { map: ConceptMapData }) {
   return (
-    <ul style={{ padding: 0, border: "1px solid #ccc", borderRadius: 4, margin: 0, paddingBlock: 8, paddingInline: 8 }}>
+    <ul
+      data-testid="concept-map"
+      style={{ padding: 0, border: "1px solid #ccc", borderRadius: 4, margin: 0, paddingBlock: 8, paddingInline: 8 }}
+    >
       {map.tree.map((n) => (
         <TreeBranch key={n.id} node={n} />
       ))}
