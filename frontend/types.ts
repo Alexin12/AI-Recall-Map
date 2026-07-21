@@ -101,3 +101,25 @@ export type Material = {
   content: string;
   created_at: string;
 };
+
+// Hand-synced with the backend Pydantic models app/home.py.
+export type DueDay = {
+  date: string;
+  count: number;
+};
+
+// counts keys are the four Mastery States (never-reviewed/weak/learning/strong);
+// consumed by the Memory Forest slice, not rendered on Global Home yet.
+export type TopicMasteryCounts = {
+  topic_id: string;
+  topic_name: string;
+  counts: Record<string, number>;
+};
+
+export type HomeSummary = {
+  review_due_count: number;
+  next_five_days: DueDay[];
+  recently_learned: Concept[];
+  topic_mastery: TopicMasteryCounts[];
+  inbox_count: number;
+};
