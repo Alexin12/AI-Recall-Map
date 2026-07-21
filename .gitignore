@@ -9,6 +9,11 @@ build/
 *.tsbuildinfo
 .pnpm-store/
 
+# Playwright (M3 e2e)
+frontend/test-results/
+frontend/playwright-report/
+frontend/blob-report/
+
 # Python
 __pycache__/
 *.pyc

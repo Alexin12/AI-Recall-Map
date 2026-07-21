@@ -18,6 +18,12 @@ from app.prompts.router_v1 import ROUTER_SYSTEM_PROMPT_V1
 OPENROUTER_MODEL = "deepseek/deepseek-v4-flash"
 
 
+def _fake_enabled() -> bool:
+    """LLM_FAKE=1 short-circuits every seam before _client(), so e2e needs no
+    OPENROUTER_API_KEY and gets deterministic output (M3 e2e ADR)."""
+    return os.environ.get("LLM_FAKE") == "1"
+
+
 def _client() -> AsyncOpenAI:
     """OpenRouter speaks the OpenAI Chat Completions API, not Anthropic's."""
     return AsyncOpenAI(
@@ -61,6 +67,13 @@ async def grade_answer(
     explanation: str, source_snippet: str, question_prompt: str, answer: str
 ) -> GradeResult:
     """Grade one answer from the Concept's explanation + snippet only (ADR-0001)."""
+    if _fake_enabled():
+        return GradeResult(
+            verdict="pass",
+            correct_points=["Named ser for essence"],
+            missing_points=["Did not mention estar"],
+            misconceptions=[],
+        )
     response = await _client().beta.chat.completions.parse(
         model=OPENROUTER_MODEL,
         max_tokens=16000,
@@ -99,6 +112,8 @@ async def score_relevance(goal: str, concepts: list[dict]) -> dict[str, str]:
 
     `concepts` items carry id, name, explanation; returns {concept_id: relevance}.
     """
+    if _fake_enabled():
+        return {c["id"]: "core" for c in concepts}
     listing = "\n".join(
         f"- id: {c['id']}\n  name: {c['name']}\n  explanation: {c['explanation']}"
         for c in concepts
@@ -138,6 +153,8 @@ async def route_concepts(topics: list[dict], concepts: list[dict]) -> list[str |
     explanation. Returns one topic_id-or-None per Concept, aligned by position.
     The router never mints Topics: unknown topic ids collapse to None.
     """
+    if _fake_enabled():
+        return [None for _ in concepts]
     topic_listing = "\n".join(
         f"- id: {t['id']}\n  name: {t['name']}\n  goal: {t.get('goal') or 'none'}"
         for t in topics
@@ -190,6 +207,8 @@ async def propose_topics(topics: list[dict], concepts: list[dict]) -> list[dict]
     [{name, indexes}] — proposals only; nothing is committed until the user
     confirms.
     """
+    if _fake_enabled():
+        return [{"name": "Spanish", "indexes": list(range(len(concepts)))}]
     topic_listing = "\n".join(f"- {t['name']}" for t in topics)
     listing = "\n".join(
         f"- index: {i}\n  name: {c['name']}\n  explanation: {c['explanation']}"
@@ -218,6 +237,21 @@ async def propose_topics(topics: list[dict], concepts: list[dict]) -> list[dict]
 
 async def extract_concepts(material_content: str, goal: str | None) -> list[ExtractedConcept]:
     """Call the LLM with Structured Outputs; return the extracted Concepts."""
+    if _fake_enabled():
+        return [
+            ExtractedConcept(
+                name="Ser vs estar",
+                explanation=(
+                    "Spanish has two verbs for 'to be': ser for essence, "
+                    "estar for state."
+                ),
+                source_snippet="Ser vs estar: ser is for essence.",
+                goal_relevance="core",
+                confidence=0.9,
+                flashcard_prompt="Which Spanish 'to be' verb is used for essence?",
+                written_prompt="Explain the difference between ser and estar.",
+            ),
+        ]
     goal_line = f"The user's learning Goal: {goal}" if goal else "The user has not set a Goal."
     response = await _client().beta.chat.completions.parse(
         model=OPENROUTER_MODEL,

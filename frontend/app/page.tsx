@@ -262,23 +262,25 @@ export default function Home() {
       </p>
       <form onSubmit={pasteMaterial}>
         <textarea
+          data-testid="paste-textarea"
           value={content}
           onChange={(e) => setContent(e.target.value)}
           placeholder="Paste material text here"
           rows={8}
           style={{ width: "100%", padding: 8 }}
         />
-        <button type="submit" style={{ padding: "8px 16px", marginTop: 8 }}>
+        <button data-testid="paste-submit" type="submit" style={{ padding: "8px 16px", marginTop: 8 }}>
           Paste material
         </button>
       </form>
-      <p>{status}</p>
+      <p data-testid="paste-status">{status}</p>
       {proposals.length > 0 && (
         <section style={{ border: "1px solid #e0b400", padding: 12, marginBottom: 16 }}>
           <h2>Proposed new topics — confirm before anything is created</h2>
           {proposals.map((p, i) => (
             <div key={i} style={{ borderBottom: "1px solid #eee", padding: "8px 0" }}>
               <input
+                data-testid="proposal-name-input"
                 value={p.name}
                 onChange={(e) =>
                   setProposals((prev) =>
@@ -288,6 +290,7 @@ export default function Home() {
                 style={{ fontWeight: "bold", padding: 6, marginRight: 8 }}
               />
               <input
+                data-testid="proposal-goal-input"
                 value={p.goal}
                 onChange={(e) =>
                   setProposals((prev) =>
@@ -297,7 +300,12 @@ export default function Home() {
                 placeholder="Optional goal for this topic"
                 style={{ padding: 6, width: "45%", marginRight: 8 }}
               />
-              <button type="button" disabled={confirming} onClick={() => confirmProposal(i)}>
+              <button
+                data-testid="proposal-create-button"
+                type="button"
+                disabled={confirming}
+                onClick={() => confirmProposal(i)}
+              >
                 {confirming ? "Creating…" : "Create topic"}
               </button>{" "}
               <button type="button" disabled={confirming} onClick={() => dismissProposal(i)}>
