@@ -18,7 +18,7 @@ def test_mastery_from_review_history():
     from app.scheduler import mastery
 
     # Verdicts are newest-first, as review history is stored.
-    assert mastery([]) == "weak"  # never reviewed
+    assert mastery([]) == "never-reviewed"  # zero reviews is its own state, not weak
     assert mastery(["fail"]) == "weak"  # latest attempt failed
     assert mastery(["fail", "strong", "strong"]) == "weak"  # a fail resets mastery
     assert mastery(["partial"]) == "learning"

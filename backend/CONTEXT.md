@@ -42,9 +42,9 @@ _Avoid_: score, grade
 _Milestone_: M1
 
 **Mastery State**:
-The three-state summary of a Concept's review history: weak, learning, strong. No numeric percentages in V1.
+The four-state summary of a Concept's review history: never-reviewed, weak, learning, strong. A Concept with zero Reviews is never-reviewed, never weak. No numeric percentages.
 _Avoid_: mastery score, progress percentage
-_Milestone_: M1 (drives the M3 dashboards)
+_Milestone_: M3 (M1 had three states; never-reviewed split out of weak)
 
 **Concept Map**:
 A hierarchy tree of a Topic's Concepts — a big Concept expands into sub-Concepts — used for navigation (click a node → Concept detail page) and gap-finding. Not a free graph of relationship edges; each Concept has one primary parent.

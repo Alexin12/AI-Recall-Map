@@ -11,12 +11,12 @@ async def test_detail_shows_concept_mastery_due_state_and_history(
     _, auth = await make_user()
     _, concept = await confirmed_scheduled_concept(client, auth, monkeypatch)
 
-    # Before any review: weak and due.
+    # Before any review: never-reviewed (distinct from weak) and due.
     detail = (await client.get(f"/concepts/{concept['id']}", headers=auth)).json()
     assert detail["name"] == "Core idea"
     assert detail["explanation"] == "Explanation of Core idea."
     assert detail["source_snippet"] == "Snippet for Core idea."
-    assert detail["mastery"] == "weak"
+    assert detail["mastery"] == "never-reviewed"
     assert detail["due"] is True
     assert {q["kind"] for q in detail["questions"]} == {"flashcard", "written"}
     assert detail["reviews"] == []
