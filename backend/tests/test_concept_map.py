@@ -25,6 +25,8 @@ def tree_concept(name: str, parent: str | None = None, second: str | None = None
         written_prompt=f"Explain {name}.",
         parent_name=parent,
         second_parent_name=second,
+        analogy=f"Analogy for {name}.",
+        technical_explanation=f"Technical explanation of {name}.",
     )
 
 

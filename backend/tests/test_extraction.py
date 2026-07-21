@@ -16,6 +16,13 @@ STUB_CONCEPTS = [
         confidence=0.9,
         flashcard_prompt="Which Spanish 'to be' verb is used for essence?",
         written_prompt="Explain the difference between ser and estar.",
+        analogy="Ser is like a person's permanent personality; estar is like their mood today.",
+        technical_explanation=(
+            "Ser marks inherent, defining traits (identity, origin, material); "
+            "estar marks temporary states and locations."
+        ),
+        core_claim="Spanish splits 'to be' into permanent (ser) and temporary (estar).",
+        ai_supplemented_fields=["analogy"],
     ),
 ]
 
@@ -67,6 +74,12 @@ async def test_extract_persists_concepts_and_returns_them(client, make_user, mon
     # The Topic has no Goal, so relevance is unscored (NULL, ADR-0006).
     assert concept["goal_relevance"] is None
     assert concept["confidence"] == 0.9
+    # AI-enriched format (ADR-0008): the six-field template is persisted.
+    assert concept["analogy"].startswith("Ser is like a person's permanent personality")
+    assert concept["technical_explanation"].startswith("Ser marks inherent")
+    assert concept["code_snippet"] == "none"
+    assert concept["core_claim"] == "Spanish splits 'to be' into permanent (ser) and temporary (estar)."
+    assert concept["ai_supplemented_fields"] == ["analogy"]
 
     # Persisted: the topic's concept list shows the same row.
     listed = await client.get(f"/topics/{topic_id}/concepts", headers=auth)
