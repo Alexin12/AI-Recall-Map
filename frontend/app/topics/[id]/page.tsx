@@ -297,7 +297,9 @@ export default function TopicPage({ params }: { params: Promise<{ id: string }> 
       )}
       {concepts.length > 0 && (
         <>
-          <h2>Concepts</h2>
+          <h2>
+            Concepts — <Link href={`/topics/${id}/all-concepts`}>All Concepts</Link>
+          </h2>
           <label style={{ fontSize: 14 }}>
             <input
               type="checkbox"
