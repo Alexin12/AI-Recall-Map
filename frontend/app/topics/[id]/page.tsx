@@ -33,6 +33,7 @@ export default function TopicPage({ params }: { params: Promise<{ id: string }> 
   const [due, setDue] = useState<Concept[]>([]);
   const [map, setMap] = useState<ConceptMapData | null>(null);
   const [goal, setGoal] = useState<string | null>(null);
+  const [topicName, setTopicName] = useState("");
   const [goalDraft, setGoalDraft] = useState("");
   const [showRelevance, setShowRelevance] = useState(true);
 
@@ -42,10 +43,11 @@ export default function TopicPage({ params }: { params: Promise<{ id: string }> 
       headers: { Authorization: `Bearer ${token}` },
     });
     if (!res.ok) return;
-    const topics: { id: string; goal: string | null }[] = await res.json();
+    const topics: { id: string; name: string; goal: string | null }[] = await res.json();
     const topic = topics.find((t) => t.id === id);
     setGoal(topic?.goal ?? null);
     setGoalDraft(topic?.goal ?? "");
+    setTopicName(topic?.name ?? "");
   }
 
   /** Set or clear this Topic's Goal; the backend rescores relevance (Phase 2). */
@@ -138,16 +140,11 @@ export default function TopicPage({ params }: { params: Promise<{ id: string }> 
   }
 
   return (
-    <main style={{ fontFamily: "system-ui", maxWidth: 640, margin: "40px auto", padding: 16 }}>
-      <h1>Topic</h1>
-      <p>Topic id: {id}</p>
+    <div>
+      <h1>{topicName || "Topic"}</h1>
       <section
-        style={{
-          border: goal ? "1px solid #ccc" : "1px solid #e0b400",
-          background: goal ? "transparent" : "#fff8e1",
-          padding: 12,
-          marginBottom: 16,
-        }}
+        className="card"
+        style={goal ? undefined : { borderColor: "var(--color-olive)", background: "var(--color-sand)" }}
       >
         <strong>Topic Goal</strong>
         {!goal && (
@@ -275,6 +272,6 @@ export default function TopicPage({ params }: { params: Promise<{ id: string }> 
         <Link href={`/topics/${id}/review`}>Start review</Link>
       </p>
       <Link href="/topics">Back to topics</Link>
-    </main>
+    </div>
   );
 }

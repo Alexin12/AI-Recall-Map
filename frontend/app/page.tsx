@@ -254,8 +254,8 @@ export default function Home() {
   }
 
   return (
-    <main style={{ fontFamily: "system-ui", maxWidth: 640, margin: "40px auto", padding: 16 }}>
-      <h1>AI Recall Map</h1>
+    <div>
+      <h1>Home</h1>
       <p>
         Paste what you just learned — concepts are extracted and filed into your{" "}
         <Link href="/topics">topics</Link> automatically.
@@ -274,7 +274,7 @@ export default function Home() {
       </form>
       <p>{status}</p>
       {proposals.length > 0 && (
-        <section style={{ border: "1px solid #e0b400", padding: 12, marginBottom: 16 }}>
+        <section className="card" style={{ borderColor: "var(--color-olive)" }}>
           <h2>Proposed new topics — confirm before anything is created</h2>
           {proposals.map((p, i) => (
             <div key={i} style={{ borderBottom: "1px solid #eee", padding: "8px 0" }}>
@@ -306,7 +306,7 @@ export default function Home() {
               <ul style={{ margin: "4px 0" }}>
                 {p.concept_ids.map((cid) => (
                   <li key={cid} style={{ marginBottom: 2 }}>
-                    {routed.find((c) => c.id === cid)?.name ?? cid}{" "}
+                    {routed.find((c) => c.id === cid)?.name ?? "(unnamed concept)"}{" "}
                     <select
                       value=""
                       disabled={confirming}
@@ -340,7 +340,7 @@ export default function Home() {
         </section>
       )}
       {routed.length > 0 && (
-        <section style={{ border: "1px solid #ccc", padding: 12, marginBottom: 16 }}>
+        <section className="card">
           <h2>Where your concepts landed</h2>
           <ul>
             {routed.map((c) => (
@@ -409,6 +409,6 @@ export default function Home() {
       <p>
         <Link href="/topics">Go to topics</Link>
       </p>
-    </main>
+    </div>
   );
 }

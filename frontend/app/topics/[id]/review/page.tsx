@@ -105,7 +105,7 @@ export default function ReviewPage({ params }: { params: Promise<{ id: string }>
   }
 
   return (
-    <main style={{ fontFamily: "system-ui", maxWidth: 640, margin: "40px auto", padding: 16 }}>
+    <div>
       <h1>Review</h1>
       <p>{status}</p>
       {current && !result && (
@@ -141,9 +141,9 @@ export default function ReviewPage({ params }: { params: Promise<{ id: string }>
         </form>
       )}
       {result && (
-        <section style={{ border: "1px solid #ccc", padding: 12 }}>
+        <section className="card">
           <h2>
-            Verdict: {result.verdict}
+            Verdict: <span className={`badge badge-verdict-${result.verdict}`}>{result.verdict}</span>
             {result.verdict_overridden ? ` (AI said ${result.ai_verdict})` : ""}
           </h2>
           <p>Next due: {new Date(result.next_due_at).toLocaleString()}</p>
@@ -188,6 +188,6 @@ export default function ReviewPage({ params }: { params: Promise<{ id: string }>
       <p>
         <Link href={`/topics/${id}`}>Back to topic</Link>
       </p>
-    </main>
+    </div>
   );
 }

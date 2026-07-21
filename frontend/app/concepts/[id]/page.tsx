@@ -45,19 +45,19 @@ export default function ConceptPage({ params }: { params: Promise<{ id: string }
   }, [id]);
 
   return (
-    <main style={{ fontFamily: "system-ui", maxWidth: 640, margin: "40px auto", padding: 16 }}>
+    <div>
       {status && <p>{status}</p>}
       {concept && (
         <>
           <h1>{concept.name}</h1>
           <p>
-            Mastery: <strong>{concept.mastery}</strong> ·{" "}
+            Mastery: <span className={`badge badge-mastery-${concept.mastery}`}>{concept.mastery}</span> ·{" "}
             {concept.due ? "Due now" : `Next due ${new Date(concept.next_due_at).toLocaleDateString()}`}{" "}
             · {concept.goal_relevance ?? "unscored"}, confidence{" "}
             {Math.round(concept.confidence * 100)}%
           </p>
           <p>{concept.explanation}</p>
-          <blockquote style={{ borderLeft: "3px solid #ccc", paddingLeft: 8 }}>
+          <blockquote style={{ borderLeft: "3px solid var(--color-sand)", paddingLeft: 8, marginInlineStart: 0 }}>
             {concept.source_snippet}
           </blockquote>
           <h2>Questions</h2>
@@ -73,7 +73,7 @@ export default function ConceptPage({ params }: { params: Promise<{ id: string }
           <ul>
             {concept.reviews.map((r) => (
               <li key={r.id} style={{ marginBottom: 8 }}>
-                <strong>{r.verdict}</strong>
+                <span className={`badge badge-verdict-${r.verdict}`}>{r.verdict}</span>
                 {r.verdict_overridden ? ` (AI said ${r.ai_verdict})` : ""} —{" "}
                 {new Date(r.created_at).toLocaleString()}
                 <br />
@@ -90,6 +90,6 @@ export default function ConceptPage({ params }: { params: Promise<{ id: string }
           <Link href={`/topics/${concept.topic_id}`}>Back to topic</Link>
         </>
       )}
-    </main>
+    </div>
   );
 }
