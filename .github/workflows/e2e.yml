@@ -52,6 +52,12 @@ jobs:
         env:
           SUPABASE_URL: ${{ env.API_URL }}
           SUPABASE_ANON_KEY: ${{ env.ANON_KEY }}
+          # A couple of routing tests don't stub every LLM seam they touch
+          # (only the ones their assertions care about), so they fall through
+          # to the real client. CI has no OPENROUTER_API_KEY, so fake those
+          # calls too rather than adding secrets for a call whose real output
+          # nothing asserts on.
+          LLM_FAKE: "1"
         run: uv run pytest
 
       - name: Frontend e2e (Playwright)
