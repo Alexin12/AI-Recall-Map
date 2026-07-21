@@ -5,6 +5,7 @@ from pydantic import BaseModel
 from sqlalchemy import text
 
 from app.deps import UserConn
+from app.scheduler import mastery
 
 router = APIRouter()
 
@@ -18,6 +19,7 @@ class TreeNode(BaseModel):
     goal_relevance: str | None
     scheduled: bool
     confirmed: bool
+    mastery: str
     children: list["TreeNode"] = []
 
 
@@ -45,6 +47,20 @@ async def concept_map(topic_id: str, conn: UserConn) -> ConceptMap:
             {"topic_id": topic_id},
         )
     ).all()
+    # All verdicts for the Topic in one query (newest first), grouped per Concept.
+    verdict_rows = (
+        await conn.execute(
+            text(
+                "SELECT r.concept_id, r.verdict FROM reviews r "
+                "JOIN concepts c ON c.id = r.concept_id "
+                "WHERE c.topic_id = :topic_id ORDER BY r.created_at DESC"
+            ),
+            {"topic_id": topic_id},
+        )
+    ).all()
+    verdicts: dict[str, list[str]] = {}
+    for v in verdict_rows:
+        verdicts.setdefault(str(v.concept_id), []).append(v.verdict)
     nodes = {
         str(r.id): TreeNode(
             id=str(r.id),
@@ -57,6 +73,7 @@ async def concept_map(topic_id: str, conn: UserConn) -> ConceptMap:
             goal_relevance=r.goal_relevance,
             scheduled=r.scheduled,
             confirmed=r.confirmed,
+            mastery=mastery(verdicts.get(str(r.id), [])),
             children=[],
         )
         for r in rows

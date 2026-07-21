@@ -10,6 +10,8 @@ from app.db import engine
 from app.llm import ExtractedConcept
 
 from tests.test_extraction import make_material, make_topic, stub_llm
+from tests.test_override import answer_flashcard
+from tests.test_reviews import confirmed_scheduled_concept, stub_grading
 
 
 def tree_concept(name: str, parent: str | None = None, second: str | None = None):
@@ -79,6 +81,21 @@ async def test_second_parent_shows_as_slash_label(client, make_user, monkeypatch
     assert child["display_label"] == "Semantic search / Embeddings"
     # Structure and review are independent: no Goal, still browsable, unscored.
     assert child["goal_relevance"] is None
+
+
+async def test_map_nodes_carry_mastery_state(client, make_user, monkeypatch):
+    """Each map node exposes its Mastery State; zero Reviews is never-reviewed,
+    and a Review moves the node off never-reviewed via the real derivation."""
+    stub_grading(monkeypatch)  # verdict: pass
+    _, auth = await make_user()
+    topic_id, concept = await confirmed_scheduled_concept(client, auth, monkeypatch)
+
+    [node] = (await client.get(f"/topics/{topic_id}/map", headers=auth)).json()["tree"]
+    assert node["mastery"] == "never-reviewed"
+
+    await answer_flashcard(client, auth, concept)  # one pass -> learning
+    [node] = (await client.get(f"/topics/{topic_id}/map", headers=auth)).json()["tree"]
+    assert node["mastery"] == "learning"
 
 
 async def test_deleting_a_concept_reparents_children_to_roots(

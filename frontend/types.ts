@@ -62,7 +62,7 @@ export type Review = {
 
 // Hand-synced with the backend Pydantic model app/concepts.py -> ConceptDetail.
 export type ConceptDetail = Concept & {
-  mastery: "weak" | "learning" | "strong";
+  mastery: "never-reviewed" | "weak" | "learning" | "strong";
   due: boolean;
   next_due_at: string;
   reviews: Review[];
@@ -76,6 +76,7 @@ export type TreeNode = {
   goal_relevance: "irrelevant" | "supporting" | "core" | null;
   scheduled: boolean;
   confirmed: boolean;
+  mastery: "never-reviewed" | "weak" | "learning" | "strong";
   children: TreeNode[];
 };
 
