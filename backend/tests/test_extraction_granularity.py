@@ -40,6 +40,12 @@ MANDARIN_KEY_CONCEPTS = [
         confidence=0.9,
         flashcard_prompt="Which app handles spaced-repetition vocabulary drills?",
         written_prompt="Describe the core Mandarin study toolkit and each tool's job.",
+        analogy="Building a toolkit is like packing a travel bag: one item per job.",
+        technical_explanation=(
+            "Four complementary tools cover the core study loop: a dictionary "
+            "(Pleco), spaced-repetition drilling (Anki), graded reading "
+            "(DuChinese), and stroke-order lookup (Hanping)."
+        ),
     ),
     ExtractedConcept(
         name="Language Practice & Immersion",
@@ -53,6 +59,11 @@ MANDARIN_KEY_CONCEPTS = [
         confidence=0.9,
         flashcard_prompt="Name one way to get native corrections on your writing.",
         written_prompt="Explain how practice and immersion complement tool-based study.",
+        analogy="Immersion is like moving to a country instead of only studying its map.",
+        technical_explanation=(
+            "Output (LangCorrect journaling), passive input (YouTube), and "
+            "guided conversation (iTalki) together drive fluency beyond drilling."
+        ),
     ),
 ]
 
@@ -126,6 +137,8 @@ async def test_supporting_detail_nests_below_key_concepts(client, make_user, mon
         flashcard_prompt="What does daily graded reading build?",
         written_prompt="Explain how a graded reading routine fits the toolkit.",
         parent_name="Essential Study Tools",
+        analogy="Graded reading is like training wheels for real Mandarin books.",
+        technical_explanation="DuChinese's leveled stories build vocabulary in context daily.",
     )
     _, auth = await make_user()
     topic_id = await extract_into_topic(

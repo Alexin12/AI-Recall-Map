@@ -28,6 +28,7 @@ export default function ConceptPage({ params }: { params: Promise<{ id: string }
   const { id } = use(params);
   const [concept, setConcept] = useState<ConceptDetail | null>(null);
   const [status, setStatus] = useState("Loading…");
+  const [sourceOpen, setSourceOpen] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -49,17 +50,66 @@ export default function ConceptPage({ params }: { params: Promise<{ id: string }
       {status && <p>{status}</p>}
       {concept && (
         <>
-          <h1>{concept.name}</h1>
+          <h1>{concept.keyword}</h1>
           <p>
             Mastery: <span className={`badge badge-mastery-${concept.mastery}`}>{concept.mastery}</span> ·{" "}
             {concept.due ? "Due now" : `Next due ${new Date(concept.next_due_at).toLocaleDateString()}`}{" "}
             · {concept.goal_relevance ?? "unscored"}, confidence{" "}
             {Math.round(concept.confidence * 100)}%
           </p>
-          <p>{concept.explanation}</p>
-          <blockquote style={{ borderLeft: "3px solid var(--color-sand)", paddingLeft: 8, marginInlineStart: 0 }}>
-            {concept.source_snippet}
-          </blockquote>
+          <p>
+            <strong>Analogy</strong>
+            {concept.ai_supplemented_fields.includes("analogy") && (
+              <>
+                {" "}
+                <span className="badge badge-ai-supplemented">AI-supplemented</span>
+              </>
+            )}
+            <br />
+            {concept.analogy}
+          </p>
+          <p>
+            <strong>Technical explanation</strong>
+            {concept.ai_supplemented_fields.includes("technical_explanation") && (
+              <>
+                {" "}
+                <span className="badge badge-ai-supplemented">AI-supplemented</span>
+              </>
+            )}
+            <br />
+            {concept.technical_explanation}
+          </p>
+          {concept.code_snippet !== "none" && (
+            <>
+              <strong>Code</strong>
+              <pre className="card" style={{ overflowX: "auto" }}>
+                <code>{concept.code_snippet}</code>
+              </pre>
+            </>
+          )}
+          {concept.core_claim && (
+            <p>
+              <strong>Core claim</strong>
+              {concept.ai_supplemented_fields.includes("core_claim") && (
+                <>
+                  {" "}
+                  <span className="badge badge-ai-supplemented">AI-supplemented</span>
+                </>
+              )}
+              <br />
+              {concept.core_claim}
+            </p>
+          )}
+          <p>
+            <button type="button" onClick={() => setSourceOpen((open) => !open)}>
+              {sourceOpen ? "Hide source" : "View source"}
+            </button>
+          </p>
+          {sourceOpen && (
+            <blockquote style={{ borderLeft: "3px solid var(--color-sand)", paddingLeft: 8, marginInlineStart: 0 }}>
+              {concept.source_excerpt}
+            </blockquote>
+          )}
           <h2>Questions</h2>
           <ul>
             {concept.questions.map((q) => (

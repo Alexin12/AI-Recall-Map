@@ -15,7 +15,8 @@ router = APIRouter()
 
 CONCEPT_COLUMNS = (
     "id, topic_id, material_id, name, explanation, source_snippet, "
-    "goal_relevance, confidence, scheduled, confirmed, created_at"
+    "goal_relevance, confidence, scheduled, confirmed, created_at, "
+    "analogy, technical_explanation, code_snippet, core_claim, ai_supplemented_fields"
 )
 
 
@@ -42,6 +43,11 @@ def concept_from_row(row, questions: list[Question] | None = None) -> Concept:
         scheduled=row.scheduled,
         confirmed=row.confirmed,
         created_at=row.created_at,
+        analogy=row.analogy,
+        technical_explanation=row.technical_explanation,
+        code_snippet=row.code_snippet,
+        core_claim=row.core_claim,
+        ai_supplemented_fields=list(row.ai_supplemented_fields),
         questions=questions or [],
     )
 

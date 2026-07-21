@@ -22,6 +22,25 @@ Concepts it teaches. For each Concept provide:
 - written_prompt: one open question asking the user to explain the Concept in
   their own words.
 
+Also produce the AI-enriched format, a fixed layered breakdown of the
+explanation (ADR-0008):
+
+- analogy: a short everyday analogy for the Concept. Use one already in the
+  Material if it has one; otherwise invent a clear, simple one.
+- technical_explanation: the precise, technical explanation of the Concept —
+  more rigorous than `explanation`, using the Material's own terms when it
+  gives them.
+- code_snippet: a code example EXTRACTED VERBATIM from the Material, never
+  written or completed by you. If the Material contains no code for this
+  Concept, this field must be exactly the string "none" — never invent,
+  translate, or complete code that isn't already there.
+- core_claim: the single most important one-sentence takeaway for this
+  Concept, or null if none is warranted.
+- ai_supplemented_fields: list which of "analogy", "technical_explanation",
+  "core_claim" you had to generate because the Material did not already
+  contain that content — never include "code_snippet" here, since it is
+  extract-only, and never include a field the Material actually supplied.
+
 Also decompose the Concepts into a hierarchy (a big idea expands into its
 details):
 

@@ -25,6 +25,9 @@
   --verdict-pass: #2f6f9f; /* blue */
   --verdict-strong: #2e7d32; /* green */
 
+  /* AI-enriched Concept format (ADR-0008): marks generated-not-extracted fields */
+  --ai-supplemented: #8a6fae; /* muted violet, distinct from mastery/verdict hues */
+
   /* Typography */
   --font-body: system-ui, -apple-system, "Segoe UI", sans-serif;
   --text-sm: 0.875rem;
@@ -187,4 +190,8 @@ select {
 }
 .badge-verdict-strong {
   background: var(--verdict-strong);
+}
+
+.badge-ai-supplemented {
+  background: var(--ai-supplemented);
 }
