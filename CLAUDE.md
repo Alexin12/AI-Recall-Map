@@ -1,5 +1,25 @@
 ## Agent skills
 
+### Decision records
+
+`DECISIONS.md` at the repo root is the single index of load-bearing decisions (Active,
+Explicitly Not Doing, Hard Rules, Historical). Before proposing any architecture, library,
+stack, or product-behavior change, read it and strictly respect its Active decisions and Hard
+Rules; do not reopen a Historical decision without saying so explicitly. It holds one-line
+decisions only — full trade-offs live in the linked `docs/adr/` entry, requirements live in the
+PRD issue.
+
+**Write back after any decision is locked** — not only at Milestone Close. As soon as a design,
+architecture, or product-behavior decision is settled in a session, before moving on: add or
+update its one-line entry in `DECISIONS.md` (move any decision it supersedes to Historical); if
+the decision is architecturally significant, write or update the matching ADR under `docs/adr/`
+or `backend/docs/adr/` and link it; if it changes domain language, update the `CONTEXT.md`
+glossary. Do this proactively without being asked.
+
+### Milestone workflow
+
+How a Milestone is planned, built, and closed (Ground → PRD → Issues → Build → Close). See `docs/agents/milestone-workflow.md`.
+
 ### Issue tracker
 
 Issues live as GitHub issues in Alexin12/AI-Recall-Map, managed via the `gh` CLI. See `docs/agents/issue-tracker.md`.
