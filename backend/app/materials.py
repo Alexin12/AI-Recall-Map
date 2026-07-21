@@ -22,12 +22,16 @@ class MaterialCreate(BaseModel):
 
 
 class Material(BaseModel):
-    """A single Material row; topic_id is NULL for a raw unsorted paste (ADR-0005)."""
+    """A single Material row; topic_id is NULL for a raw unsorted paste (ADR-0005).
+
+    concept_names lists the names of Concepts extracted from this Material
+    (issue #29) — display tags instead of truncated raw content."""
 
     id: str
     topic_id: str | None
     content: str
     created_at: datetime
+    concept_names: list[str] = []
 
 
 def material_from_row(r) -> Material:
@@ -36,6 +40,7 @@ def material_from_row(r) -> Material:
         topic_id=str(r.topic_id) if r.topic_id else None,
         content=r.content,
         created_at=r.created_at,
+        concept_names=list(getattr(r, "concept_names", None) or []),
     )
 
 
@@ -63,18 +68,27 @@ async def require_own_topic(topic_id: str, conn) -> None:
 
 @router.get("/topics/{topic_id}/materials", response_model=list[Material])
 async def list_materials(topic_id: str, conn: UserConn) -> list[Material]:
-    """Return the Materials pasted into this Topic (RLS hides everyone else's)."""
+    """Return the Materials pasted into this Topic (RLS hides everyone else's),
+    each carrying the names of the Concepts extracted from it (issue #29)."""
     await require_own_topic(topic_id, conn)
     result = await conn.execute(
         text(
-            "SELECT id, topic_id, content, created_at FROM materials "
-            "WHERE topic_id = :topic_id ORDER BY created_at"
+            "SELECT m.id, m.topic_id, m.content, m.created_at, "
+            "COALESCE(array_agg(c.name) FILTER (WHERE c.name IS NOT NULL), '{}') "
+            "AS concept_names "
+            "FROM materials m LEFT JOIN concepts c ON c.material_id = m.id "
+            "WHERE m.topic_id = :topic_id "
+            "GROUP BY m.id ORDER BY m.created_at"
         ),
         {"topic_id": topic_id},
     )
     return [
         Material(
-            id=str(r.id), topic_id=str(r.topic_id), content=r.content, created_at=r.created_at
+            id=str(r.id),
+            topic_id=str(r.topic_id),
+            content=r.content,
+            created_at=r.created_at,
+            concept_names=list(r.concept_names),
         )
         for r in result
     ]

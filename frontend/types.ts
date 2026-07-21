@@ -100,6 +100,7 @@ export type Material = {
   topic_id: string | null;
   content: string;
   created_at: string;
+  concept_names: string[];
 };
 
 // Hand-synced with the backend Pydantic models app/home.py.

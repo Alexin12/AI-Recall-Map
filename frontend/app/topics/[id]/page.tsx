@@ -4,10 +4,32 @@ import { use, useEffect, useState } from "react";
 import Link from "next/link";
 
 import { supabase } from "@/lib/supabaseClient";
-import type { Concept, ConceptMap as ConceptMapData, Material } from "@/types";
+import type { Concept, ConceptMap as ConceptMapData, Material, TreeNode } from "@/types";
 import ConceptMap from "./ConceptMap";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL!;
+
+/** Guidance only (issue #78) — never gates saving, never calls a model. */
+const EXAMPLE_GOALS = [
+  "build RAG apps for production",
+  "pass the AWS Solutions Architect exam",
+  "understand distributed systems for interviews",
+  "learn conversational Spanish",
+  "master data structures & algorithms",
+];
+
+/** Tally weak/learning/strong Mastery States across the tree; never-reviewed is reported separately. */
+function tallyMastery(
+  nodes: TreeNode[],
+  counts = { weak: 0, learning: 0, strong: 0, neverReviewed: 0 },
+) {
+  for (const node of nodes) {
+    if (node.mastery === "never-reviewed") counts.neverReviewed++;
+    else counts[node.mastery]++;
+    tallyMastery(node.children, counts);
+  }
+  return counts;
+}
 
 /** Reuse the current session or sign a throwaway demo user up (same demo auth as the home page). */
 async function getToken(): Promise<string> {
@@ -36,6 +58,8 @@ export default function TopicPage({ params }: { params: Promise<{ id: string }> 
   const [topicName, setTopicName] = useState("");
   const [goalDraft, setGoalDraft] = useState("");
   const [showRelevance, setShowRelevance] = useState(true);
+  const [clearConfirming, setClearConfirming] = useState(false);
+  const [undoGoal, setUndoGoal] = useState<string | null>(null);
 
   async function loadGoal() {
     const token = await getToken();
@@ -72,6 +96,21 @@ export default function TopicPage({ params }: { params: Promise<{ id: string }> 
     setStatus(topic.goal ? "Goal saved — relevance rescored" : "Goal cleared");
     await loadConcepts();
     await loadDue();
+  }
+
+  /** Inline "are you sure?" confirm for Clear Goal, plus Undo restoring the prior value. */
+  async function confirmClear() {
+    const previous = goal;
+    setClearConfirming(false);
+    await saveGoal(null);
+    setUndoGoal(previous);
+  }
+
+  async function undoClear() {
+    if (!undoGoal) return;
+    const restored = undoGoal;
+    setUndoGoal(null);
+    await saveGoal(restored);
   }
 
   async function loadConcepts() {
@@ -156,7 +195,10 @@ export default function TopicPage({ params }: { params: Promise<{ id: string }> 
         <form
           onSubmit={(e) => {
             e.preventDefault();
-            if (goalDraft.trim()) saveGoal(goalDraft.trim());
+            if (goalDraft.trim()) {
+              setUndoGoal(null);
+              saveGoal(goalDraft.trim());
+            }
           }}
         >
           <input
@@ -172,24 +214,78 @@ export default function TopicPage({ params }: { params: Promise<{ id: string }> 
           >
             Save Goal
           </button>{" "}
-          {goal && (
-            <button type="button" onClick={() => saveGoal(null)}>
+          {goal && !clearConfirming && (
+            <button type="button" onClick={() => setClearConfirming(true)}>
               Clear Goal
             </button>
           )}
+          {clearConfirming && (
+            <span>
+              Clear this Goal? Concepts will stop being scored and scheduled.{" "}
+              <button type="button" onClick={confirmClear}>
+                Yes, clear
+              </button>{" "}
+              <button type="button" onClick={() => setClearConfirming(false)}>
+                Cancel
+              </button>
+            </span>
+          )}
         </form>
+        <p style={{ fontSize: "var(--text-sm)", color: "var(--color-text-muted)" }}>
+          Examples:{" "}
+          {EXAMPLE_GOALS.map((example, i) => (
+            <span key={example}>
+              <button type="button" onClick={() => setGoalDraft(example)} style={{ padding: "1px 8px" }}>
+                {example}
+              </button>
+              {i < EXAMPLE_GOALS.length - 1 ? " " : ""}
+            </span>
+          ))}
+        </p>
+        {undoGoal && (
+          <p>
+            Goal cleared.{" "}
+            <button type="button" onClick={undoClear}>
+              Undo
+            </button>
+          </p>
+        )}
       </section>
       <p>
         Paste new material on the <Link href="/">Global Home</Link> — it routes concepts
         into your topics automatically.
       </p>
       <p>{status}</p>
+      {map && map.tree.length > 0 && (
+        <>
+          <h2>Mastery overview</h2>
+          {(() => {
+            const t = tallyMastery(map.tree);
+            return (
+              <p>
+                <span className="badge badge-mastery-weak">weak {t.weak}</span>{" "}
+                <span className="badge badge-mastery-learning">learning {t.learning}</span>{" "}
+                <span className="badge badge-mastery-strong">strong {t.strong}</span>{" "}
+                {t.neverReviewed > 0 && `· ${t.neverReviewed} not yet reviewed`}
+              </p>
+            );
+          })()}
+        </>
+      )}
+      <h2>Materials</h2>
       <ul>
         {materials.map((m) => (
           <li key={m.id}>
-            {m.content.slice(0, 80)}
-            {m.content.length > 80 ? "…" : ""} —{" "}
-            {new Date(m.created_at).toLocaleDateString()}
+            {m.concept_names.length > 0 ? (
+              m.concept_names.map((name) => (
+                <span key={name} className="tag" style={{ marginRight: 4 }}>
+                  {name}
+                </span>
+              ))
+            ) : (
+              <span style={{ color: "var(--color-text-muted)" }}>no concepts extracted yet</span>
+            )}{" "}
+            — {new Date(m.created_at).toLocaleDateString()}
           </li>
         ))}
       </ul>
