@@ -19,6 +19,8 @@ def extraction_stub(names: list[str]):
             confidence=0.9,
             flashcard_prompt=f"What is {name}?",
             written_prompt=f"Explain {name}.",
+            analogy=f"{name} is like something familiar.",
+            technical_explanation=f"{name} explained technically.",
         )
         for name in names
     ]
