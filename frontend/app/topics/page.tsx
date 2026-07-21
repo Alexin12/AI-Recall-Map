@@ -60,7 +60,7 @@ export default function TopicsPage() {
   }
 
   return (
-    <main style={{ fontFamily: "system-ui", maxWidth: 640, margin: "40px auto", padding: 16 }}>
+    <div>
       <h1>Topics</h1>
       <form onSubmit={createTopic}>
         <input
@@ -74,13 +74,16 @@ export default function TopicsPage() {
         </button>
       </form>
       <p>{status}</p>
-      <ul>
+      <ul style={{ paddingLeft: 0, listStyle: "none" }}>
         {topics.map((t) => (
-          <li key={t.id}>
+          <li key={t.id} className="card">
             <Link href={`/topics/${t.id}`}>{t.name}</Link>
+            <div style={{ fontSize: "var(--text-sm)", color: "var(--color-text-muted)" }}>
+              {t.goal ? `Goal: ${t.goal}` : "No Goal set"}
+            </div>
           </li>
         ))}
       </ul>
-    </main>
+    </div>
   );
 }

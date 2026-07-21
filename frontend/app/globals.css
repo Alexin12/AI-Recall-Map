@@ -1,0 +1,190 @@
+/* Design tokens and App Shell styles for Recall Map (issue #71).
+   Palette per DECISIONS.md: restrained sand/olive on a warm background;
+   mastery color lives primarily on Concept nodes. No UI framework. */
+
+:root {
+  /* Palette */
+  --color-sand: #eadbc8;
+  --color-olive: #7a8a63;
+  --color-deep-olive: #556b2f;
+  --color-bg: #faf7f0;
+  --color-card: #ffffff;
+  --color-text: #2f2a24;
+  --color-text-muted: #6f675c;
+  --color-border: #e2d8c8;
+
+  /* Mastery State tokens (four states, muted earth tones) */
+  --mastery-strong: #556b2f; /* deep olive */
+  --mastery-learning: #d9a441; /* muted amber */
+  --mastery-weak: #e2725b; /* coral — softer than verdict-fail red */
+  --mastery-never-reviewed: #9a948b; /* neutral gray */
+
+  /* Review Verdict tokens (four verdicts, crisper feedback colors) */
+  --verdict-fail: #c0392b; /* red */
+  --verdict-partial: #e69b12; /* amber */
+  --verdict-pass: #2f6f9f; /* blue */
+  --verdict-strong: #2e7d32; /* green */
+
+  /* Typography */
+  --font-body: system-ui, -apple-system, "Segoe UI", sans-serif;
+  --text-sm: 0.875rem;
+  --text-base: 1rem;
+  --text-lg: 1.25rem;
+  --text-xl: 1.6rem;
+
+  /* Spacing */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+  --space-8: 32px;
+
+  --radius: 8px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-body);
+  font-size: var(--text-base);
+  line-height: 1.55;
+  color: var(--color-text);
+  background: var(--color-bg);
+}
+
+h1 {
+  font-size: var(--text-xl);
+}
+
+h2 {
+  font-size: var(--text-lg);
+}
+
+a {
+  color: var(--color-deep-olive);
+}
+
+button {
+  font: inherit;
+  color: var(--color-text);
+  background: var(--color-sand);
+  border: 1px solid var(--color-olive);
+  border-radius: var(--radius);
+  padding: var(--space-2) var(--space-4);
+  cursor: pointer;
+}
+
+button:hover:enabled {
+  background: var(--color-olive);
+  color: #fff;
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+input,
+textarea,
+select {
+  font: inherit;
+  color: var(--color-text);
+  background: var(--color-card);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: var(--space-2);
+}
+
+/* Shared focus style */
+:focus-visible {
+  outline: 2px solid var(--color-deep-olive);
+  outline-offset: 2px;
+}
+
+/* App Shell */
+.shell-header {
+  background: var(--color-sand);
+  border-bottom: 1px solid var(--color-olive);
+}
+
+.shell-nav {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: var(--space-3) var(--space-4);
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-4);
+}
+
+.shell-brand {
+  font-weight: 700;
+  color: var(--color-deep-olive);
+  text-decoration: none;
+  margin-right: var(--space-2);
+}
+
+.shell-nav a:not(.shell-brand) {
+  color: var(--color-text);
+  text-decoration: none;
+}
+
+.shell-nav a:not(.shell-brand):hover {
+  color: var(--color-deep-olive);
+  text-decoration: underline;
+}
+
+.shell-main {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: var(--space-6) var(--space-4) var(--space-8);
+}
+
+/* Card surface for page sections */
+.card {
+  background: var(--color-card);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+
+/* Small colored pill for Mastery States and Review Verdicts.
+   Pass the token via a background-color inline style or the classes below. */
+.badge {
+  display: inline-block;
+  color: #fff;
+  font-size: var(--text-sm);
+  line-height: 1.3;
+  padding: 1px var(--space-2);
+  border-radius: 999px;
+}
+
+.badge-mastery-strong {
+  background: var(--mastery-strong);
+}
+.badge-mastery-learning {
+  background: var(--mastery-learning);
+}
+.badge-mastery-weak {
+  background: var(--mastery-weak);
+}
+.badge-mastery-never-reviewed {
+  background: var(--mastery-never-reviewed);
+}
+
+.badge-verdict-fail {
+  background: var(--verdict-fail);
+}
+.badge-verdict-partial {
+  background: var(--verdict-partial);
+}
+.badge-verdict-pass {
+  background: var(--verdict-pass);
+}
+.badge-verdict-strong {
+  background: var(--verdict-strong);
+}
