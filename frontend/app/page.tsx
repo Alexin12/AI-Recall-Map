@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 
 import { supabase } from "@/lib/supabaseClient";
-import type { Concept, Topic } from "@/types";
+import type { Concept, HomeSummary, Topic } from "@/types";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL!;
 
@@ -30,8 +30,11 @@ async function getToken(): Promise<string> {
   return signup.session.access_token;
 }
 
-/** Global Home: the single paste box (ADR-0005). Extraction routes each Concept
- * into an existing Topic; what fits nowhere lands in the inbox below. */
+/** Global Home (M3): leads with the review-needed count and a Start Review
+ * action; Material paste/extraction (ADR-0005) moves to a smaller side area,
+ * with next-5-days, recently-learned, and the Inbox count as supporting
+ * panels. Extraction routes each Concept into an existing Topic; what fits
+ * nowhere lands in the inbox further down the page. */
 export default function Home() {
   const [content, setContent] = useState("");
   const [status, setStatus] = useState("");
@@ -42,6 +45,7 @@ export default function Home() {
   const [confirming, setConfirming] = useState(false);
   const [pendingMoves, setPendingMoves] = useState<Record<string, string>>({});
   const [savingMoves, setSavingMoves] = useState(false);
+  const [summary, setSummary] = useState<HomeSummary | null>(null);
 
   async function loadTopics() {
     const token = await getToken();
@@ -67,10 +71,21 @@ export default function Home() {
     if (res.ok) setRouted(await res.json());
   }
 
+  /** One request for the review-needed count, next-5-days, recently learned,
+   * and Inbox count (Hard Rule: one purpose-built contract, no per-Concept calls). */
+  async function loadSummary() {
+    const token = await getToken();
+    const res = await fetch(`${API_URL}/home/summary`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (res.ok) setSummary(await res.json());
+  }
+
   useEffect(() => {
     loadTopics().catch((e) => setStatus(String(e)));
     loadInbox().catch(() => {});
     loadRouted().catch(() => {});
+    loadSummary().catch(() => {});
   }, []);
 
   /** Paste → extract (streamed) → auto-confirm; then refresh the inbox. */
@@ -148,6 +163,7 @@ export default function Home() {
     });
     setStatus("Routed — see where each concept landed below");
     await loadInbox();
+    await loadSummary();
   }
 
   /** Confirm one proposed Topic: one atomic backend call creates it (with its
@@ -185,6 +201,7 @@ export default function Home() {
       setStatus(`Created "${topic.name}" and filed ${proposal.concept_ids.length} concept(s)`);
       await loadTopics();
       await loadInbox();
+      await loadSummary();
     } finally {
       setConfirming(false);
     }
@@ -234,6 +251,7 @@ export default function Home() {
     }
     setRouted((prev) => prev.map((c) => (c.id === conceptId ? { ...c, topic_id: topicId } : c)));
     await loadInbox();
+    await loadSummary();
   }
 
   const topicName = (topicId: string | null) =>
@@ -253,26 +271,91 @@ export default function Home() {
     }
   }
 
+  const dayLabel = (date: string, index: number) =>
+    index === 0
+      ? "Today"
+      : new Date(date).toLocaleDateString(undefined, {
+          weekday: "short",
+          month: "short",
+          day: "numeric",
+        });
+
   return (
     <div>
-      <h1>Home</h1>
-      <p>
-        Paste what you just learned — concepts are extracted and filed into your{" "}
-        <Link href="/topics">topics</Link> automatically.
-      </p>
-      <form onSubmit={pasteMaterial}>
-        <textarea
-          value={content}
-          onChange={(e) => setContent(e.target.value)}
-          placeholder="Paste material text here"
-          rows={8}
-          style={{ width: "100%", padding: 8 }}
-        />
-        <button type="submit" style={{ padding: "8px 16px", marginTop: 8 }}>
-          Paste material
-        </button>
-      </form>
-      <p>{status}</p>
+      {/* Review-first hero (M3): leads with the review-needed count and one
+       * Start Review action; the actual global review session is a later
+       * issue (#80/#82) — for now this links to the Topics list. */}
+      <section className="card home-hero">
+        <p className="home-hero-label">Concepts needing review right now</p>
+        <p className="home-hero-count">{summary ? summary.review_due_count : "—"}</p>
+        <Link href="/topics">
+          <button type="button" className="home-hero-cta">
+            Start Review
+          </button>
+        </Link>
+      </section>
+
+      <div className="home-secondary">
+        {/* Material paste/extraction: moved to a smaller side area. */}
+        <aside className="card home-paste">
+          <h2 className="home-paste-heading">Paste material</h2>
+          <p className="home-paste-hint">
+            Extracted concepts are filed into your <Link href="/topics">topics</Link>{" "}
+            automatically.
+          </p>
+          <form onSubmit={pasteMaterial}>
+            <textarea
+              value={content}
+              onChange={(e) => setContent(e.target.value)}
+              placeholder="Paste material text here"
+              rows={5}
+              style={{ width: "100%", padding: 8 }}
+            />
+            <button type="submit" style={{ padding: "6px 12px", marginTop: 8 }}>
+              Paste material
+            </button>
+          </form>
+          {status && <p className="home-paste-status">{status}</p>}
+        </aside>
+
+        {/* Supporting panels: next 5 days, recently learned, Inbox count. */}
+        <div className="home-panels">
+          <section className="card">
+            <h2>Next 5 days</h2>
+            <ul className="home-day-list">
+              {(summary?.next_five_days ?? []).map((d, i) => (
+                <li key={d.date}>
+                  <span>{dayLabel(d.date, i)}</span>
+                  <span className="home-day-count">{d.count}</span>
+                </li>
+              ))}
+            </ul>
+          </section>
+
+          <section className="card">
+            <h2>Recently learned</h2>
+            {summary && summary.recently_learned.length > 0 ? (
+              <ul style={{ paddingLeft: 0, listStyle: "none" }}>
+                {summary.recently_learned.map((c) => (
+                  <li key={c.id}>{c.name}</li>
+                ))}
+              </ul>
+            ) : (
+              <p>Nothing reviewed yet.</p>
+            )}
+          </section>
+
+          <section className="card">
+            <h2>Inbox</h2>
+            <p>
+              <a href="#inbox">
+                {summary ? summary.inbox_count : "—"} unclassified concept(s)
+              </a>
+            </p>
+          </section>
+        </div>
+      </div>
+
       {proposals.length > 0 && (
         <section className="card" style={{ borderColor: "var(--color-olive)" }}>
           <h2>Proposed new topics — confirm before anything is created</h2>
@@ -379,7 +462,7 @@ export default function Home() {
           )}
         </section>
       )}
-      <h2>Inbox</h2>
+      <h2 id="inbox">Inbox</h2>
       {inbox.length === 0 ? (
         <p>Nothing unclassified — every concept has a topic.</p>
       ) : (

@@ -188,3 +188,103 @@ select {
 .badge-verdict-strong {
   background: var(--verdict-strong);
 }
+
+/* Global Home (issue #74): review-first hero, paste moved to a smaller side
+   area, next-5-days/recently-learned/inbox-count as supporting panels. */
+.home-hero {
+  text-align: center;
+  padding: var(--space-8) var(--space-4);
+  background: var(--color-sand);
+  border-color: var(--color-olive);
+}
+
+.home-hero-label {
+  margin: 0;
+  color: var(--color-text-muted);
+}
+
+.home-hero-count {
+  margin: var(--space-2) 0 var(--space-4);
+  font-size: 3rem;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--color-deep-olive);
+}
+
+.home-hero-cta {
+  font-size: var(--text-lg);
+  padding: var(--space-3) var(--space-6);
+  background: var(--color-deep-olive);
+  color: #fff;
+  border-color: var(--color-deep-olive);
+}
+
+.home-hero-cta:hover:enabled {
+  background: var(--color-olive);
+}
+
+.home-secondary {
+  display: grid;
+  grid-template-columns: 1fr 1.4fr;
+  gap: var(--space-4);
+  align-items: start;
+  margin-bottom: var(--space-4);
+}
+
+@media (max-width: 640px) {
+  .home-secondary {
+    grid-template-columns: 1fr;
+  }
+}
+
+.home-paste {
+  font-size: var(--text-sm);
+}
+
+.home-paste-heading {
+  font-size: var(--text-base);
+  margin-top: 0;
+}
+
+.home-paste-hint {
+  color: var(--color-text-muted);
+  margin-top: 0;
+}
+
+.home-paste-status {
+  color: var(--color-text-muted);
+  margin-bottom: 0;
+}
+
+.home-panels {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.home-panels h2 {
+  font-size: var(--text-base);
+  margin-top: 0;
+}
+
+.home-day-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.home-day-list li {
+  display: flex;
+  justify-content: space-between;
+  padding: var(--space-1) 0;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.home-day-list li:last-child {
+  border-bottom: none;
+}
+
+.home-day-count {
+  font-weight: 700;
+  color: var(--color-deep-olive);
+}

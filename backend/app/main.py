@@ -12,6 +12,7 @@ from app.concepts import router as concepts_router
 from app.confirmation import router as confirmation_router
 from app.deps import UserConn
 from app.extraction import router as extraction_router
+from app.home import router as home_router
 from app.materials import router as materials_router
 from app.reviews import router as reviews_router
 from app.topics import router as topics_router
@@ -21,6 +22,7 @@ app.include_router(concept_map_router)
 app.include_router(concepts_router)
 app.include_router(confirmation_router)
 app.include_router(extraction_router)
+app.include_router(home_router)
 app.include_router(materials_router)
 app.include_router(reviews_router)
 app.include_router(topics_router)
