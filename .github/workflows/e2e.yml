@@ -19,7 +19,9 @@ jobs:
         run: supabase start
 
       - name: Export Supabase connection details
-        run: supabase status -o env >> "$GITHUB_ENV"
+        # `-o env` quotes each value (e.g. API_URL="http://..."); $GITHUB_ENV
+        # takes the line literally, so strip the quotes before appending.
+        run: supabase status -o env | sed -E 's/^([A-Z_]+)="(.*)"$/\1=\2/' >> "$GITHUB_ENV"
 
       - uses: astral-sh/setup-uv@v5
         with:
