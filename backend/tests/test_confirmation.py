@@ -14,6 +14,8 @@ def concept_of(relevance: str, name: str) -> ExtractedConcept:
         confidence=0.8,
         flashcard_prompt=f"Flashcard for {name}?",
         written_prompt=f"Explain {name}.",
+        analogy=f"Analogy for {name}.",
+        technical_explanation=f"Technical explanation of {name}.",
     )
 
 

@@ -47,6 +47,17 @@ class Concept(BaseModel):
     scheduled: bool
     confirmed: bool
     created_at: datetime
+    # AI-enriched format (ADR-0008): a fixed six-field template layered on
+    # top of name/explanation/source_snippet. analogy and technical_explanation
+    # are always required; code_snippet is extract-only ("none" when absent);
+    # core_claim is optional; ai_supplemented_fields flags any of
+    # {analogy, technical_explanation, core_claim} the model generated rather
+    # than found in the Material.
+    analogy: str
+    technical_explanation: str
+    code_snippet: str
+    core_claim: str | None
+    ai_supplemented_fields: list[str] = []
     questions: list[Question] = []
 
 
@@ -87,11 +98,14 @@ async def insert_concept(
         await conn.execute(
             text(
                 "INSERT INTO concepts (topic_id, material_id, name, explanation, "
-                "source_snippet, goal_relevance, confidence, scheduled) "
+                "source_snippet, goal_relevance, confidence, scheduled, analogy, "
+                "technical_explanation, code_snippet, core_claim, ai_supplemented_fields) "
                 "VALUES (:topic_id, :material_id, :name, :explanation, "
-                ":source_snippet, :goal_relevance, :confidence, :scheduled) "
+                ":source_snippet, :goal_relevance, :confidence, :scheduled, :analogy, "
+                ":technical_explanation, :code_snippet, :core_claim, :ai_supplemented_fields) "
                 "RETURNING id, topic_id, material_id, name, explanation, "
-                "source_snippet, goal_relevance, confidence, scheduled, confirmed, created_at"
+                "source_snippet, goal_relevance, confidence, scheduled, confirmed, created_at, "
+                "analogy, technical_explanation, code_snippet, core_claim, ai_supplemented_fields"
             ),
             {
                 "topic_id": topic_id,
@@ -104,6 +118,11 @@ async def insert_concept(
                 "goal_relevance": extracted.goal_relevance if goal else None,
                 "confidence": extracted.confidence,
                 "scheduled": bool(goal) and extracted.goal_relevance in ("core", "supporting"),
+                "analogy": extracted.analogy,
+                "technical_explanation": extracted.technical_explanation,
+                "code_snippet": extracted.code_snippet,
+                "core_claim": extracted.core_claim,
+                "ai_supplemented_fields": extracted.ai_supplemented_fields,
             },
         )
     ).one()
@@ -137,6 +156,11 @@ async def insert_concept(
         scheduled=row.scheduled,
         confirmed=row.confirmed,
         created_at=row.created_at,
+        analogy=row.analogy,
+        technical_explanation=row.technical_explanation,
+        code_snippet=row.code_snippet,
+        core_claim=row.core_claim,
+        ai_supplemented_fields=list(row.ai_supplemented_fields),
         questions=questions,
     )
 
@@ -281,8 +305,9 @@ async def list_concepts(topic_id: str, conn: UserConn) -> list[Concept]:
     rows = await conn.execute(
         text(
             "SELECT id, topic_id, material_id, name, explanation, source_snippet, "
-            "goal_relevance, confidence, scheduled, confirmed, created_at FROM concepts "
-            "WHERE topic_id = :topic_id ORDER BY created_at"
+            "goal_relevance, confidence, scheduled, confirmed, created_at, analogy, "
+            "technical_explanation, code_snippet, core_claim, ai_supplemented_fields "
+            "FROM concepts WHERE topic_id = :topic_id ORDER BY created_at"
         ),
         {"topic_id": topic_id},
     )
@@ -299,6 +324,11 @@ async def list_concepts(topic_id: str, conn: UserConn) -> list[Concept]:
             scheduled=r.scheduled,
             confirmed=r.confirmed,
             created_at=r.created_at,
+            analogy=r.analogy,
+            technical_explanation=r.technical_explanation,
+            code_snippet=r.code_snippet,
+            core_claim=r.core_claim,
+            ai_supplemented_fields=list(r.ai_supplemented_fields),
         )
         for r in rows
     ]
