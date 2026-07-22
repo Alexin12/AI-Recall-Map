@@ -121,8 +121,11 @@ function ConceptNode({ data }: NodeProps<Node<ConceptNodeData>>) {
       onClick={() => !isRoot && data.hasChildren && data.onToggle()}
       onContextMenu={(e) => !isRoot && openDetail(e)}
       onKeyDown={isRoot ? undefined : handleKeyDown}
-      className={masteryClass ? `badge ${masteryClass}` : undefined}
+      className={`nopan${masteryClass ? ` badge ${masteryClass}` : ""}`}
       style={{
+        // ReactFlow marks non-selectable/non-draggable nodes pointer-events:none so
+        // drags pan the canvas; re-enable events here so clicks reach this content.
+        pointerEvents: "all",
         display: "flex",
         alignItems: "center",
         gap: 6,

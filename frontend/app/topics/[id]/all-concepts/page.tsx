@@ -99,6 +99,11 @@ export default function AllConceptsPage({ params }: { params: Promise<{ id: stri
                           editConcept(row.id, { name: e.target.value.trim() });
                         }
                       }}
+                      // Enter commits the rename (blur runs the save above); without this a
+                      // text field only saves on focus loss, so Enter-then-reload lost the edit.
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") e.currentTarget.blur();
+                      }}
                       style={{ width: "100%" }}
                     />
                   </td>
